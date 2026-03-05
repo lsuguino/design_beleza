@@ -51,11 +51,6 @@ export default function PreviewPage() {
     return () => canvas.removeEventListener('scroll', handleScroll);
   }, [data, handleScroll]);
 
-  // Manter refs alinhados ao número de páginas
-  useEffect(() => {
-    pageRefs.current = pageRefs.current.slice(0, paginas.length);
-  }, [paginas.length]);
-
   const scrollToPage = useCallback((index: number) => {
     pageRefs.current[index]?.scrollIntoView({ behavior: 'smooth' });
   }, []);
@@ -64,6 +59,15 @@ export default function PreviewPage() {
     window.print();
   }, []);
 
+  const design = data?.design || data?.conteudo;
+  const rawPaginas = design?.paginas ?? (design as { pages?: unknown[] })?.pages;
+  const paginas = Array.isArray(rawPaginas) ? rawPaginas : [];
+
+  // Manter refs alinhados ao número de páginas (após ter paginas definido)
+  useEffect(() => {
+    pageRefs.current = pageRefs.current.slice(0, paginas.length);
+  }, [paginas.length]);
+
   if (data === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#2d2d3a]" role="status" aria-label="Carregando preview">
@@ -71,10 +75,6 @@ export default function PreviewPage() {
       </div>
     );
   }
-
-  const design = data.design || data.conteudo;
-  const rawPaginas = design?.paginas ?? (design as { pages?: unknown[] })?.pages;
-  const paginas = Array.isArray(rawPaginas) ? rawPaginas : [];
 
   return (
     <div className="preview-layout flex h-screen bg-[#2d2d3a] overflow-hidden">

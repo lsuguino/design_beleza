@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
     const nomeCurso = tema.name;
 
     // 1. Gera o material escrito; o content-agent faz a CONFERÊNCIA (verifica se todo o VTT está no material) antes de retornar.
-    let conteudo = await generateContent(transcricao, modo, nomeCurso) as Record<string, unknown>;
+    let conteudo = (await generateContent(transcricao, modo, nomeCurso)) as unknown as Record<string, unknown>;
     // Normalizar: garantir "paginas" (a IA pode retornar "pages")
     if (!conteudo.paginas && Array.isArray(conteudo.pages)) {
       conteudo = { ...conteudo, paginas: conteudo.pages };

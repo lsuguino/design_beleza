@@ -139,7 +139,7 @@ export default function Home() {
           transition={{ duration: 0.4 }}
           className="text-2xl md:text-3xl font-bold text-white"
         >
-          Designer <span style={{ color: ACCENT }}>Beleza</span>
+          Design <span style={{ color: ACCENT }}>Beleza</span>
         </motion.h1>
       </header>
 

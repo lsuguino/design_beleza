@@ -18,19 +18,22 @@ REGRAS OBRIGATÓRIAS:
    - sugestao_icone: em cada página, sugira um ícone descritivo (ex.: "gráfico crescendo", "checklist", "lampada") que represente o conteúdo.
 
 ESTRUTURA DO JSON DE RETORNO:
+- "titulo" (raiz): OBRIGATÓRIO. Título principal da aula/material, extraído ou resumido da transcrição (ex.: tema da aula, nome do módulo).
+- Cada página em "paginas" DEVE ter "titulo" ou "titulo_bloco" preenchido com o título daquela seção/aula (nunca deixe vazio).
 {
   "titulo": "título da aula",
   "subtitulo_curso": "nome do curso",
   "paginas": [
     {
       "tipo": "capa",
-      "titulo": "título",
+      "titulo": "título (mesmo da raiz ou variante para capa)",
       "subtitulo": "subtítulo",
       "sugestao_imagem": "descrição para capa"
     },
     {
       "tipo": "conteudo",
-      "titulo_bloco": "título do bloco",
+      "titulo": "título desta seção/aula (OBRIGATÓRIO)",
+      "titulo_bloco": "título do bloco (se diferente; senão use titulo)",
       "bloco_principal": "texto corrido...",
       "destaques": ["ponto 1", "ponto 2"],
       "citacao": "frase marcante (se houver)",

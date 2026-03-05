@@ -50,13 +50,15 @@ interface PreviewData {
   curso_id?: string;
 }
 
-function normalizePaginaConteudo(p: PaginaDesign): PaginaDesign & { paragrafos?: string[] } {
+function normalizePaginaConteudo(p: PaginaDesign, pageIndex: number): PaginaDesign & { paragrafos?: string[] } {
   const paragrafos = p.bloco_principal
     ? p.bloco_principal.split(/\n+/).filter(Boolean)
     : [];
+  /** pageIndex: 1 para primeira página de conteúdo, 2 para segunda, etc. (0 = capa, sem fallback) */
+  const tituloFallback = p.tipo !== 'capa' && pageIndex >= 1 ? `Aula ${pageIndex}` : undefined;
   return {
     ...p,
-    titulo: p.titulo ?? p.titulo_bloco,
+    titulo: p.titulo ?? p.titulo_bloco ?? tituloFallback ?? '',
     paragrafos: paragrafos.length > 0 ? paragrafos : (p.bloco_principal ? [p.bloco_principal] : []),
     layout_tipo: (p.layout_tipo as string) || 'header_destaque',
     cor_fundo_principal: p.cor_fundo_principal ?? '#f8fafc',
@@ -130,7 +132,7 @@ export default function PreviewPage() {
   const tema = data.tema || { name: 'Curso', primary: '#446EFF', primaryLight: '#6B8CFF', primaryDark: '#2d5aff', accent: '#446EFF' };
   const paginas = design?.paginas || [];
   const nomeCurso = tema.name || (design as { subtitulo_curso?: string })?.subtitulo_curso || 'Material';
-  const tituloGeral = design?.titulo || 'Material gerado';
+  const tituloGeral = design?.titulo?.trim() || nomeCurso || 'Material gerado';
   const cursoId = data.curso_id;
 
   return (
@@ -233,7 +235,8 @@ export default function PreviewPage() {
               );
             }
 
-            const paginaNorm = normalizePaginaConteudo(pagina);
+            const numeroAula = paginas.slice(0, index).filter((pg) => pg.tipo !== 'capa').length + (pagina.tipo !== 'capa' ? 1 : 0);
+            const paginaNorm = normalizePaginaConteudo(pagina, numeroAula);
             return wrap(
               <PageConteudo
                 pagina={paginaNorm as Parameters<typeof PageConteudo>[0]['pagina']}

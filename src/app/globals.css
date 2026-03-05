@@ -55,6 +55,10 @@
   --font-material-serif: 'Lora', Georgia, serif;
 }
 
+/* Garantir que a página principal ocupe e mostre o conteúdo */
+html, body { min-height: 100%; }
+body { display: flex; flex-direction: column; }
+
 /* Temas por curso: sobrescrevem --primary no material */
 .theme-geral { --theme-primary: #2A2A2A; --theme-primary-dark: #1a1a1a; --theme-accent: #55B8A1; }
 .theme-marketing { --theme-primary: #7c3aed; --theme-primary-dark: #5b21b6; --theme-accent: #a78bfa; }

@@ -5,6 +5,7 @@ import { parseVTT } from '@/lib/vtt-parser';
 import { generateContent } from '@/lib/content-agent';
 import { generateDesign } from '@/lib/design-agent';
 import { COURSE_THEMES, type CourseId } from '@/lib/courseThemes';
+import { getFriendlyErrorMessage } from '@/lib/anthropic-error';
 
 export const maxDuration = 300;
 
@@ -168,31 +169,37 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
 
-    const vttFile = formData.get('vtt') as File | null;
-    if (!vttFile || !(vttFile instanceof File)) {
+    const vttFile = formData.get('vtt') as File | Blob | null;
+    if (!vttFile || (typeof (vttFile as Blob).text !== 'function' && typeof (vttFile as Blob).arrayBuffer !== 'function')) {
       return NextResponse.json(
-        { error: 'Arquivo VTT não enviado. Use o campo "vtt".' },
+        { error: 'Arquivo VTT não enviado. Selecione um arquivo .vtt e tente novamente.' },
         { status: 400 }
       );
     }
 
-    const cursoId = formData.get('curso_id');
-    if (!cursoId || typeof cursoId !== 'string') {
+    const cursoId = (formData.get('curso_id') as string | null)?.trim() || '';
+    if (!cursoId) {
       return NextResponse.json(
-        { error: 'curso_id não informado.' },
+        { error: 'Curso não informado. Selecione um curso de destino.' },
         { status: 400 }
       );
     }
 
-    const modo = formData.get('modo');
+    const modo = formData.get('modo') as string | null;
     if (!modo || typeof modo !== 'string' || !isModo(modo)) {
       return NextResponse.json(
-        { error: 'modo inválido. Use: completo ou resumido.' },
+        { error: 'Modo inválido. Use: completo ou resumido.' },
         { status: 400 }
       );
     }
 
-    const vttContent = await vttFile.text();
+    let vttContent: string;
+    if (typeof (vttFile as File).text === 'function') {
+      vttContent = await (vttFile as File).text();
+    } else {
+      const buf = await (vttFile as Blob).arrayBuffer();
+      vttContent = new TextDecoder('utf-8').decode(buf);
+    }
     const transcricao = parseVTT(vttContent);
     if (!transcricao.trim()) {
       return NextResponse.json(
@@ -254,10 +261,19 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     console.error('[api/generate]', err);
-    const message = err instanceof Error ? err.message : 'Erro ao gerar material.';
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    );
+    let message: string;
+    try {
+      message = getFriendlyErrorMessage(err);
+    } catch {
+      message = 'Erro ao gerar material. Tente novamente.';
+    }
+    const status =
+      typeof err === 'object' &&
+      err !== null &&
+      'status' in err &&
+      typeof (err as { status: number }).status === 'number'
+        ? (err as { status: number }).status
+        : 500;
+    return NextResponse.json({ error: message }, { status: status >= 400 ? status : 500 });
   }
 }

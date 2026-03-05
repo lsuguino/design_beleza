@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
 import { MaterialPreviewBlocks, type PreviewData } from '@/components/MaterialPreviewBlocks';
 import { MermaidInit } from '@/components/MermaidInit';
+import { SafeArea } from '@/components/SafeArea';
 
 const STORAGE_KEY = 'rtg-preview-data';
 
@@ -73,17 +74,23 @@ export default function Home() {
     fetch('/api/themes')
       .then((res) => res.json())
       .then((data: ThemeOption[]) => {
-        setThemes(data);
-        if (data.length > 0 && !cursoId) setCursoId(data[0].id);
+        const list = Array.isArray(data) ? data : [];
+        setThemes(list.length > 0 ? list : [{ id: 'geral', name: 'Venda Todo Santo Dia' }]);
+        if (list.length > 0 && !cursoId) setCursoId(list[0].id);
+        if (list.length === 0) setCursoId('geral');
       })
-      .catch(() => setThemes([{ id: 'geral', name: 'Venda Todo Santo Dia' }]));
+      .catch(() => {
+        setThemes([{ id: 'geral', name: 'Venda Todo Santo Dia' }]);
+        setCursoId('geral');
+      });
   }, [cursoId]);
 
   const runGenerate = useCallback(
-    async (vttFile: File) => {
+    async (vttFile: File, effectiveCursoId?: string) => {
+      const cid = effectiveCursoId ?? (cursoId || themes[0]?.id || 'geral');
       const form = new FormData();
       form.append('vtt', vttFile);
-      form.append('curso_id', cursoId);
+      form.append('curso_id', cid);
       form.append('modo', modo);
       const res = await fetch('/api/generate', { method: 'POST', body: form });
       if (!res.ok) {
@@ -92,12 +99,17 @@ export default function Home() {
       }
       return res.json() as Promise<PreviewData>;
     },
-    [cursoId, modo]
+    [cursoId, modo, themes]
   );
 
   const handleSubmit = useCallback(async () => {
-    if (!file || !cursoId) {
-      setError('Selecione o arquivo VTT e o curso de destino.');
+    if (!file) {
+      setError('Selecione o arquivo VTT (clique em "Selecionar Arquivo" ou arraste o .vtt na área).');
+      return;
+    }
+    const cId = cursoId || (themes[0]?.id ?? 'geral');
+    if (!cId) {
+      setError('Selecione o curso de destino.');
       return;
     }
     setError(null);
@@ -108,8 +120,9 @@ export default function Home() {
     const interval = setInterval(() => setProgressStep((s) => s + 1), 2500);
 
     try {
-      const data = await runGenerate(file);
+      const data = await runGenerate(file, cId);
       clearInterval(interval);
+      setError(null);
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       }
@@ -214,18 +227,19 @@ export default function Home() {
       : '90%';
 
   return (
-    <div className="font-lexend bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen relative overflow-x-hidden">
-      <div className="fixed inset-0 z-0">
+    <div className="font-lexend bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen min-h-[100vh] flex flex-col relative overflow-x-hidden w-full">
+      <div className="fixed inset-0 z-0 pointer-events-none" aria-hidden>
         <div className="absolute inset-0 bg-navy/60 dark:bg-navy/80 z-10" />
         <img
-          alt="Fundo decorativo"
+          alt=""
+          role="presentation"
           className="w-full h-full object-cover"
           src="https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=1920&q=80"
         />
       </div>
 
-      <div className="relative z-20 flex flex-col min-h-screen">
-        <header className="w-full px-6 py-4 flex items-center justify-between glass border-b-0 mt-4 mx-auto max-w-6xl rounded-xl">
+      <div className="relative z-20 flex flex-col flex-1 w-full min-h-[80vh]">
+        <header className="w-full px-4 sm:px-6 py-4 flex items-center justify-between glass border-b-0 mt-4 mx-auto max-w-6xl rounded-xl shrink-0">
           <div className="flex items-center gap-3">
             <div className="bg-primary p-2 rounded-lg flex items-center justify-center">
               <span className="material-symbols-outlined text-white text-xl">auto_awesome</span>
@@ -238,10 +252,10 @@ export default function Home() {
         </header>
 
         <main
-          className={`flex-1 flex p-6 overflow-hidden min-h-0 ${
+          className={`flex-1 flex w-full max-w-7xl mx-auto p-4 sm:p-6 box-border min-h-[50vh] ${
             generatedData
-              ? 'flex-col md:flex-row gap-6'
-              : 'flex-col items-center justify-center'
+              ? 'flex-col md:flex-row gap-6 items-start min-h-0 overflow-hidden'
+              : 'flex-col items-center justify-center overflow-y-auto'
           }`}
         >
           {/* Card do formulário */}
@@ -256,8 +270,29 @@ export default function Home() {
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-semibold text-navy/80 mb-2">Arquivo de Origem</label>
-              <div
+              <label className="block text-sm font-semibold text-navy/80 mb-2">Arquivo de Origem (VTT)</label>
+              <input
+                id="vtt-file-input"
+                ref={inputRef}
+                type="file"
+                accept=".vtt,text/vtt,application/x-subrip,audio/vtt,video/vtt,*/*"
+                className="sr-only peer"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) {
+                    const name = (f.name || '').toLowerCase();
+                    if (name.endsWith('.vtt') || f.type === 'text/vtt' || f.type === 'application/x-subrip' || f.type === '') {
+                      setFile(f);
+                      setError(null);
+                    } else {
+                      setError('Selecione um arquivo .vtt (legendas).');
+                    }
+                  }
+                  e.target.value = '';
+                }}
+              />
+              <label
+                htmlFor="vtt-file-input"
                 onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) setIsDragging(true); }}
                 onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
                 onDrop={(e) => {
@@ -265,39 +300,29 @@ export default function Home() {
                   e.stopPropagation();
                   setIsDragging(false);
                   const f = e.dataTransfer.files?.[0];
-                  if (f && (f.name.toLowerCase().endsWith('.vtt') || f.type === 'text/vtt')) {
-                    setFile(f);
-                    setError(null);
-                  } else setError('Envie apenas arquivos .vtt');
+                  if (f) {
+                    const name = (f.name || '').toLowerCase();
+                    if (name.endsWith('.vtt') || f.type === 'text/vtt' || f.type === 'application/x-subrip' || f.type === '') {
+                      setFile(f);
+                      setError(null);
+                    } else setError('Arraste apenas arquivos .vtt');
+                  }
                 }}
-                onClick={() => inputRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center bg-white/40 hover:bg-white/60 transition-all cursor-pointer group ${
+                className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center bg-white/40 hover:bg-white/60 transition-all cursor-pointer group block ${
                   isDragging ? 'border-primary bg-primary/10' : 'border-primary/30'
                 }`}
               >
-                <input ref={inputRef} type="file" accept=".vtt,text/vtt" className="hidden" onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f && (f.name.toLowerCase().endsWith('.vtt') || f.type === 'text/vtt')) {
-                    setFile(f);
-                    setError(null);
-                  } else if (f) setError('Envie apenas arquivos .vtt');
-                  e.target.value = '';
-                }} />
-                <div className="size-14 rounded-full bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <div className="size-14 rounded-full bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform pointer-events-none">
                   <span className="material-symbols-outlined text-primary text-3xl">upload_file</span>
                 </div>
-                <p className="text-navy font-medium">
-                  {file ? file.name : 'Arraste seu arquivo VTT ou clique para selecionar'}
+                <p className="text-navy font-medium pointer-events-none">
+                  {file ? file.name : 'Arraste seu arquivo .vtt aqui ou clique para abrir'}
                 </p>
-                <p className="text-navy/40 text-xs mt-1">Apenas arquivos .vtt — limite 50MB</p>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
-                  className="mt-4 px-6 py-2 bg-primary/10 text-primary font-semibold rounded-lg hover:bg-primary/20 transition-colors text-sm"
-                >
-                  Selecionar Arquivo
-                </button>
-              </div>
+                <p className="text-navy/40 text-xs mt-1 pointer-events-none">Apenas arquivos .vtt — até 50MB</p>
+                <span className="mt-4 px-6 py-2 bg-primary/10 text-primary font-semibold rounded-lg hover:bg-primary/20 transition-colors text-sm inline-block">
+                  Abrir e selecionar arquivo VTT
+                </span>
+              </label>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -391,7 +416,7 @@ export default function Home() {
           {/* Painel de preview ao lado quando há material gerado */}
           <AnimatePresence>
             {generatedData && (
-              <div className="flex-1 min-w-0 flex flex-col glass rounded-xl shadow-2xl overflow-hidden">
+              <div className="flex-1 min-w-0 min-h-0 flex flex-col glass rounded-xl shadow-2xl overflow-hidden">
                 <div className="p-4 border-b border-white/20 flex flex-wrap items-center justify-between gap-3">
                   <span className="text-navy font-semibold">Preview do documento</span>
                   <div className="flex flex-wrap gap-2">
@@ -442,16 +467,18 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 min-h-[400px]">
-                  <MermaidInit className="flex flex-col items-center">
-                    <MaterialPreviewBlocks data={generatedData} scale={0.35} />
-                  </MermaidInit>
+                  <SafeArea>
+                    <MermaidInit className="flex flex-col items-center">
+                      <MaterialPreviewBlocks data={generatedData} scale={0.35} />
+                    </MermaidInit>
+                  </SafeArea>
                 </div>
               </div>
             )}
           </AnimatePresence>
         </main>
 
-        <footer className="p-6 text-center text-white/40 text-xs shrink-0">
+        <footer className="p-6 text-center text-white/40 dark:text-white/50 text-xs shrink-0">
           © {new Date().getFullYear()} Design Beleza. Todos os direitos reservados.
         </footer>
       </div>

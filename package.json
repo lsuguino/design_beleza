@@ -9,6 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "serve": "npm run build && next start",
     "lint": "next lint",
     "pdf": "node scripts/generate-pdf.js",
     "images:book": "node scripts/generate-images-for-book.js"

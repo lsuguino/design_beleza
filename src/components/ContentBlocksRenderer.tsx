@@ -26,6 +26,7 @@ export function ContentBlocksRenderer({ blocks, className = '' }: ContentBlocksR
   return (
     <div className={className}>
       {blocks.map((block, i) => {
+        if (!block || typeof block !== 'object') return null;
         if (block.type === 'text') {
           const paragraphs = block.content.split(/\n+/).filter(Boolean);
           return (

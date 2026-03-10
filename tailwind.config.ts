@@ -10,17 +10,18 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        display: ['var(--font-lexend)', 'Lexend', 'system-ui', 'sans-serif'],
+        display: ['var(--font-display)', 'Inter', 'system-ui', 'sans-serif'],
         body: ['var(--font-lexend)', 'Lexend', 'system-ui', 'sans-serif'],
         lexend: ['Lexend', 'system-ui', 'sans-serif'],
         material: ['var(--font-material-serif)', 'Georgia', 'serif'],
         sora: ['var(--font-sora)', 'Sora', 'system-ui', 'sans-serif'],
       },
       colors: {
-        primary: '#006eff',
+        primary: '#2b4bee',
+        'neon-cyan': '#00f2ff',
         navy: '#0f1823',
-        'background-light': '#f5f7f8',
-        'background-dark': '#0f1823',
+        'background-light': '#f6f6f8',
+        'background-dark': '#06070d',
         'surface-dark': '#1E293B',
         'border-dark': '#334155',
         'neutral-cream': '#f7f3f0',

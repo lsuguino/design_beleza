@@ -2,8 +2,8 @@
  * Parse VTT content and return clean plain text (no timestamps, no WEBVTT, no sequence numbers).
  */
 
-/** Regex para linha de timestamp: 00:00:00.000 --> 00:00:00.000 */
-const TIMESTAMP_LINE = /^\d{2}:\d{2}:\d{2}\.\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}\.\d{3}/;
+/** Regex para linha de timestamp: VTT (00:00:00.000) ou SRT (00:00:00,000) */
+const TIMESTAMP_LINE = /^\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[.,]\d{3}/;
 
 /**
  * Recebe o conteúdo de um arquivo VTT, remove timestamps, WEBVTT, números de sequência

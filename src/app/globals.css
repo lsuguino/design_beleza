@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/icon?family=Material+Icons+Round');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@24,400,0&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&display=swap');
 
@@ -33,11 +34,25 @@
 }
 
 .dark .glass,
-.glass-dark {
-  background: rgba(15, 24, 35, 0.8);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+.glass-dark,
+.glass-panel {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.neon-border {
+  border: 1px solid rgba(0, 242, 255, 0.3);
+  box-shadow: 0 0 15px rgba(0, 242, 255, 0.1);
+}
+
+.neon-text-glow {
+  text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+}
+
+.neon-glow-primary {
+  box-shadow: 0 0 20px rgba(43, 75, 238, 0.4);
 }
 
 @tailwind base;
@@ -66,6 +81,7 @@ body { display: flex; flex-direction: column; }
 .theme-saude { --theme-primary: #059669; --theme-primary-dark: #047857; --theme-accent: #34d399; }
 .theme-design { --theme-primary: #ea580c; --theme-primary-dark: #c2410c; --theme-accent: #fb923c; }
 .theme-tecnologia { --theme-primary: #0891b2; --theme-primary-dark: #0e7490; --theme-accent: #22d3ee; }
+.theme-master-fluxo { --theme-primary: #1e3a5f; --theme-primary-dark: #0f2744; --theme-accent: #d4a853; }
 
 @keyframes pulse-slow {
   0%, 100% { opacity: 1; }

@@ -22,7 +22,19 @@ const FINALIZANDO_CICLO = [
   'Ajustando conteúdo...',
 ];
 
+/** Extensões aceitas para arquivo de texto ou PDF. */
+const TEXT_EXTENSIONS = ['.txt', '.vtt', '.srt', '.md', '.csv', '.json', '.xml'];
+const PDF_EXTENSION = '.pdf';
+function isAcceptedFile(f: File): boolean {
+  const name = (f.name || '').toLowerCase();
+  const okText = TEXT_EXTENSIONS.some((ext) => name.endsWith(ext));
+  const okPdf = name.endsWith(PDF_EXTENSION) || f.type === 'application/pdf';
+  const okType = (f.type || '').startsWith('text/') || f.type === 'application/x-subrip' || f.type === '';
+  return okText || okPdf || okType;
+}
+
 type Modo = 'completo' | 'resumido';
+type TipoEntrada = 'transcricao' | 'organizado';
 
 interface ThemeOption {
   id: string;
@@ -55,6 +67,7 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [cursoId, setCursoId] = useState('');
   const [modo, setModo] = useState<Modo>('completo');
+  const [tipoEntrada, setTipoEntrada] = useState<TipoEntrada>('transcricao');
   const [themes, setThemes] = useState<ThemeOption[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -86,25 +99,33 @@ export default function Home() {
   }, [cursoId]);
 
   const runGenerate = useCallback(
-    async (vttFile: File, effectiveCursoId?: string) => {
+    async (textFile: File, effectiveCursoId?: string) => {
       const cid = effectiveCursoId ?? (cursoId || themes[0]?.id || 'geral');
       const form = new FormData();
-      form.append('vtt', vttFile);
+      form.append('vtt', textFile);
       form.append('curso_id', cid);
       form.append('modo', modo);
+      form.append('tipo_entrada', tipoEntrada);
       const res = await fetch('/api/generate', { method: 'POST', body: form });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error((data.error as string) || 'Falha ao gerar material');
+        let msg = 'Falha ao gerar material';
+        try {
+          const data = await res.json();
+          if (typeof data?.error === 'string' && data.error.trim()) msg = data.error;
+        } catch {
+          const text = await res.text().catch(() => '');
+          if (text && text.length < 300 && !text.startsWith('<')) msg = text;
+        }
+        throw new Error(msg);
       }
       return res.json() as Promise<PreviewData>;
     },
-    [cursoId, modo, themes]
+    [cursoId, modo, tipoEntrada, themes]
   );
 
   const handleSubmit = useCallback(async () => {
     if (!file) {
-      setError('Selecione o arquivo VTT (clique em "Selecionar Arquivo" ou arraste o .vtt na área).');
+      setError('Selecione um arquivo de texto (clique em "Selecionar Arquivo" ou arraste o arquivo na área).');
       return;
     }
     const cId = cursoId || (themes[0]?.id ?? 'geral');
@@ -165,20 +186,20 @@ export default function Home() {
   const handleBatchFolder = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
-      const vtts = files.filter((f) => f.name.toLowerCase().endsWith('.vtt'));
+      const textFiles = files.filter((f) => isAcceptedFile(f));
       e.target.value = '';
-      if (vtts.length === 0) {
-        setError('Nenhum arquivo .vtt na pasta.');
+      if (textFiles.length === 0) {
+        setError('Nenhum arquivo de texto ou PDF na pasta (.txt, .vtt, .srt, .md, .pdf, etc.).');
         return;
       }
-      setBatchQueue(vtts);
+      setBatchQueue(textFiles);
       setBatchIndex(0);
-      setBatchCurrentFile(vtts[0]);
+      setBatchCurrentFile(textFiles[0]);
       setError(null);
       setGeneratedData(null);
       setLoading(true);
       setProgressStep(0);
-      runGenerate(vtts[0])
+      runGenerate(textFiles[0])
         .then((data) => {
           if (typeof window !== 'undefined') {
             window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -217,6 +238,19 @@ export default function Home() {
     router.push('/preview');
   }, [router]);
 
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f && isAcceptedFile(f)) {
+      setFile(f);
+      setError(null);
+    } else if (f) {
+      setError('Arraste apenas arquivos de texto ou PDF.');
+    }
+  }, []);
+
   const progressLabel =
     progressStep < PROGRESS_MESSAGES.length
       ? PROGRESS_MESSAGES[progressStep]
@@ -227,203 +261,252 @@ export default function Home() {
       : '90%';
 
   return (
-    <div className="font-lexend bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen min-h-[100vh] flex flex-col relative overflow-x-hidden w-full">
-      <div className="fixed inset-0 z-0 pointer-events-none" aria-hidden>
-        <div className="absolute inset-0 bg-navy/60 dark:bg-navy/80 z-10" />
-        <img
-          alt=""
-          role="presentation"
-          className="w-full h-full object-cover"
-          src="https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=1920&q=80"
-        />
-      </div>
+    <div className="font-sans bg-background-dark text-slate-100 min-h-screen flex flex-col relative overflow-x-hidden w-full">
+      {/* Background Accents */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/20 rounded-full blur-[120px] pointer-events-none" aria-hidden />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-neon-cyan/10 rounded-full blur-[120px] pointer-events-none" aria-hidden />
 
-      <div className="relative z-20 flex flex-col flex-1 w-full min-h-[80vh]">
-        <header className="w-full px-4 sm:px-6 py-4 flex items-center justify-between glass border-b-0 mt-4 mx-auto max-w-6xl rounded-xl shrink-0">
+      <div className="relative z-20 flex flex-col flex-1 w-full">
+        {/* Header */}
+        <header className="sticky top-0 z-50 glass-panel border-b border-white/5 px-6 lg:px-20 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-primary p-2 rounded-lg flex items-center justify-center">
-              <span className="material-symbols-outlined text-white text-xl">auto_awesome</span>
+            <div className="bg-white rounded-lg shadow-lg overflow-hidden h-10 w-10 flex items-center justify-center">
+              <span className="material-symbols-outlined text-primary text-2xl">auto_awesome</span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-navy dark:text-white">Design Beleza</h1>
+            <h2 className="text-xl font-black tracking-tighter text-white uppercase italic">Material <span className="text-neon-cyan">Beleza</span></h2>
           </div>
-          <nav className="hidden md:flex items-center gap-8">
-            <span className="text-sm font-medium text-navy/70">Gerador de Materiais</span>
+          <nav className="hidden md:flex items-center gap-10">
+            <a className="text-sm font-semibold text-slate-400 hover:text-neon-cyan transition-colors" href="#">Painel</a>
+            <a className="text-sm font-semibold text-slate-400 hover:text-neon-cyan transition-colors" href="#">Meus Materiais</a>
+            <a className="text-sm font-semibold text-white border-b-2 border-neon-cyan pb-1" href="#">Gerador</a>
           </nav>
+          <div className="flex items-center gap-4">
+            <button type="button" className="p-2 text-slate-400 hover:text-white transition-colors" aria-label="Notificações">
+              <span className="material-symbols-outlined">notifications</span>
+            </button>
+            <div className="h-10 w-10 rounded-full border-2 border-primary/50 overflow-hidden bg-slate-800 flex items-center justify-center">
+              <span className="material-symbols-outlined text-slate-500">person</span>
+            </div>
+          </div>
         </header>
 
         <main
-          className={`flex-1 flex w-full max-w-7xl mx-auto p-4 sm:p-6 box-border min-h-[50vh] ${
+          className={`flex-1 flex w-full max-w-6xl mx-auto px-6 py-12 box-border relative z-10 ${
             generatedData
               ? 'flex-col md:flex-row gap-6 items-start min-h-0 overflow-hidden'
-              : 'flex-col items-center justify-center overflow-y-auto'
+              : 'flex-col overflow-y-auto'
           }`}
         >
           {/* Card do formulário */}
           <div
-            className={`w-full max-w-2xl glass rounded-xl p-8 shadow-2xl shrink-0 ${
-              generatedData ? 'h-fit' : ''
-            }`}
+            className={`w-full shrink-0 ${generatedData ? 'max-w-2xl h-fit' : ''}`}
           >
-            <div className="mb-8 text-center">
-              <h2 className="text-3xl font-extrabold text-navy mb-2">Geração Inteligente</h2>
-              <p className="text-navy/60">Transforme suas aulas em materiais de estudo de alta qualidade.</p>
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-navy/80 mb-2">Arquivo de Origem (VTT)</label>
-              <input
-                id="vtt-file-input"
-                ref={inputRef}
-                type="file"
-                accept=".vtt,text/vtt,application/x-subrip,audio/vtt,video/vtt,*/*"
-                className="sr-only peer"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) {
-                    const name = (f.name || '').toLowerCase();
-                    if (name.endsWith('.vtt') || f.type === 'text/vtt' || f.type === 'application/x-subrip' || f.type === '') {
-                      setFile(f);
-                      setError(null);
-                    } else {
-                      setError('Selecione um arquivo .vtt (legendas).');
-                    }
-                  }
-                  e.target.value = '';
-                }}
-              />
-              <label
-                htmlFor="vtt-file-input"
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) setIsDragging(true); }}
-                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setIsDragging(false);
-                  const f = e.dataTransfer.files?.[0];
-                  if (f) {
-                    const name = (f.name || '').toLowerCase();
-                    if (name.endsWith('.vtt') || f.type === 'text/vtt' || f.type === 'application/x-subrip' || f.type === '') {
-                      setFile(f);
-                      setError(null);
-                    } else setError('Arraste apenas arquivos .vtt');
-                  }
-                }}
-                className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center bg-white/40 hover:bg-white/60 transition-all cursor-pointer group block ${
-                  isDragging ? 'border-primary bg-primary/10' : 'border-primary/30'
-                }`}
-              >
-                <div className="size-14 rounded-full bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform pointer-events-none">
-                  <span className="material-symbols-outlined text-primary text-3xl">upload_file</span>
+            {!generatedData && (
+              <section className="flex flex-col lg:flex-row items-center gap-12 mb-16">
+                <div className="flex-1 space-y-6">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/20 border border-primary/30 text-xs font-bold text-neon-cyan uppercase tracking-widest">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-neon-cyan opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-neon-cyan" />
+                    </span>
+                    Nova tecnologia Claude
+                  </div>
+                  <h1 className="text-5xl lg:text-7xl font-black leading-tight text-white tracking-tight">
+                    Gerar Materiais de <br />
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-neon-cyan to-white neon-text-glow">Estudo com IA</span>
+                  </h1>
+                  <p className="text-lg text-slate-400 max-w-xl">
+                    Transforme seus conteúdos brutos em materiais didáticos estruturados, quizzes e resumos otimizados em questão de segundos.
+                  </p>
                 </div>
-                <p className="text-navy font-medium pointer-events-none">
-                  {file ? file.name : 'Arraste seu arquivo .vtt aqui ou clique para abrir'}
-                </p>
-                <p className="text-navy/40 text-xs mt-1 pointer-events-none">Apenas arquivos .vtt — até 50MB</p>
-                <span className="mt-4 px-6 py-2 bg-primary/10 text-primary font-semibold rounded-lg hover:bg-primary/20 transition-colors text-sm inline-block">
-                  Abrir e selecionar arquivo VTT
-                </span>
-              </label>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-semibold text-navy/80 mb-2">Curso de Destino</label>
-                <div className="relative">
-                  <select
-                    value={cursoId}
-                    onChange={(e) => setCursoId(e.target.value)}
-                    disabled={loading}
-                    className="w-full bg-white/50 border border-white/40 rounded-xl h-12 px-4 pr-10 appearance-none focus:ring-2 focus:ring-primary focus:border-transparent text-navy outline-none disabled:opacity-50"
-                  >
-                    <option value="">Selecione um curso</option>
-                    {themes.map((t) => (
-                      <option key={t.id} value={t.id} className="bg-white text-navy">{t.name}</option>
-                    ))}
-                  </select>
-                  <span className="material-symbols-outlined absolute right-3 top-3 text-navy/40 pointer-events-none text-xl">expand_more</span>
+                <div className="w-full lg:w-2/5 flex justify-center">
+                  <div className="relative group">
+                    <div className="absolute inset-0 bg-primary/30 blur-3xl rounded-full group-hover:bg-neon-cyan/20 transition-all duration-700" />
+                    <div className="relative glass-panel rounded-3xl p-8 border border-white/10 overflow-hidden">
+                      <span className="material-symbols-outlined text-8xl text-neon-cyan/80 animate-pulse">psychology</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-navy/80 mb-2">Modo de Geração</label>
-                <div className="flex p-1 bg-white/40 rounded-xl gap-1">
-                  <button type="button" onClick={() => !loading && setModo('completo')} disabled={loading}
-                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${modo === 'completo' ? 'bg-white text-primary shadow-sm' : 'text-navy/60 hover:bg-white/30'}`}>
-                    Completo
-                  </button>
-                  <button type="button" onClick={() => !loading && setModo('resumido')} disabled={loading}
-                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${modo === 'resumido' ? 'bg-white text-primary shadow-sm' : 'text-navy/60 hover:bg-white/30'}`}>
-                    Resumido
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={loading}
-              className="w-full bg-primary hover:bg-primary/90 disabled:opacity-70 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/30 transition-all active:scale-[0.98] flex items-center justify-center gap-3 mb-4"
-            >
-              <span className="material-symbols-outlined">psychology</span>
-              {loading ? 'Gerando...' : 'Geração Inteligente'}
-            </button>
-
-            <input
-              ref={(el) => {
-                (batchInputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
-                if (el) el.setAttribute('webkitdirectory', '');
-              }}
-              type="file"
-              accept=".vtt"
-              className="hidden"
-              multiple
-              onChange={handleBatchFolder}
-            />
-            <button
-              type="button"
-              onClick={() => batchInputRef.current?.click()}
-              disabled={loading}
-              className="w-full py-3 rounded-xl border-2 border-primary/40 text-primary font-semibold hover:bg-primary/10 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <span className="material-symbols-outlined text-xl">folder_open</span>
-              Geração em lote
-            </button>
-
-            <div className="mt-6">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-semibold text-navy/50 uppercase tracking-wider">Status do Processamento</span>
-                <span className="text-xs font-bold text-primary">{loading ? progressLabel : 'Pronto para iniciar'}</span>
-              </div>
-              <div className="w-full bg-white/30 h-2 rounded-full overflow-hidden">
-                <div className="bg-primary h-full rounded-full transition-all duration-500 ease-out" style={{ width: loading ? progressWidth : '0%' }} />
-              </div>
-            </div>
-
-            {isBatchMode && (
-              <p className="mt-3 text-xs text-navy/70">
-                Lote: {batchIndex + 1} de {batchQueue.length}
-                {currentBatchFile && ` — ${currentBatchFile.name}`}
-              </p>
+              </section>
             )}
 
-            <AnimatePresence>
-              {error && (
-                <div className="mt-6 p-4 rounded-xl bg-red-500/20 border border-red-500/40 text-red-600 text-sm">{error}</div>
+            <div className="glass-panel rounded-3xl p-8 lg:p-12 mb-12 shadow-2xl relative">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                {/* Upload Area */}
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="material-symbols-outlined text-neon-cyan">upload_file</span>
+                    <h3 className="font-bold text-white uppercase tracking-wider text-sm">Upload de Conteúdo</h3>
+                  </div>
+                  <div className="relative">
+                    <input
+                      id="vtt-file-input"
+                      ref={inputRef}
+                      type="file"
+                      accept=".txt,.vtt,.srt,.md,.csv,.json,.xml,.pdf,text/*,application/x-subrip,application/pdf"
+                      className="absolute w-0 h-0 opacity-0 overflow-hidden"
+                      aria-hidden
+                      tabIndex={-1}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          if (isAcceptedFile(f)) {
+                            setFile(f);
+                            setError(null);
+                          } else {
+                            setError('Selecione um arquivo de texto ou PDF (.txt, .vtt, .srt, .md, .pdf, etc.).');
+                          }
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+                    <label
+                      htmlFor="vtt-file-input"
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) setIsDragging(true); }}
+                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
+                      onDrop={handleDrop}
+                      className={isDragging ? 'flex-1 flex flex-col items-center justify-center gap-6 rounded-2xl border-2 border-dashed py-16 px-8 cursor-pointer group transition-all border-neon-cyan bg-white/10' : 'flex-1 flex flex-col items-center justify-center gap-6 rounded-2xl border-2 border-dashed py-16 px-8 cursor-pointer group transition-all border-primary/40 bg-white/5 hover:bg-white/10 hover:border-neon-cyan'}
+                    >
+                      <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:scale-110 transition-transform">
+                        <span className="material-symbols-outlined text-4xl text-neon-cyan">cloud_upload</span>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-white text-xl font-bold mb-2">{file ? file.name : 'Arraste e solte seus arquivos'}</p>
+                        <p className="text-slate-400 text-sm">PDF, TXT, VTT, SRT, MD (Máx 50MB)</p>
+                      </div>
+                      <button type="button" className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold text-sm border border-white/10 transition-all">
+                        Selecionar Arquivo
+                      </button>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Configuration Area */}
+                <div className="flex flex-col gap-8">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="material-symbols-outlined text-neon-cyan">settings</span>
+                    <h3 className="font-bold text-white uppercase tracking-wider text-sm">Configurações de Geração</h3>
+                  </div>
+                  <div className="space-y-6">
+                    <div className="space-y-3">
+                      <label className="text-sm font-semibold text-slate-300">Tipo de entrada</label>
+                      <div className="flex bg-slate-900/80 p-1.5 rounded-xl border border-white/5 gap-1">
+                        <button type="button" onClick={() => !loading && setTipoEntrada('transcricao')} disabled={loading}
+                          className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${tipoEntrada === 'transcricao' ? 'bg-primary text-white shadow-lg' : 'hover:bg-white/5 text-slate-400'}`}>
+                          Transcrição
+                        </button>
+                        <button type="button" onClick={() => !loading && setTipoEntrada('organizado')} disabled={loading}
+                          className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${tipoEntrada === 'organizado' ? 'bg-primary text-white shadow-lg' : 'hover:bg-white/5 text-slate-400'}`}>
+                          Texto organizado
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <label className="text-sm font-semibold text-slate-300">Selecionar Curso</label>
+                      <div className="relative">
+                        <select
+                          value={cursoId}
+                          onChange={(e) => setCursoId(e.target.value)}
+                          disabled={loading}
+                          className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-5 py-4 text-white focus:ring-2 focus:ring-primary focus:border-transparent appearance-none outline-none disabled:opacity-50"
+                        >
+                          <option value="">Selecione o curso destino...</option>
+                          {themes.map((t) => (
+                            <option key={t.id} value={t.id} className="bg-slate-900 text-white">{t.name}</option>
+                          ))}
+                        </select>
+                        <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">expand_more</span>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <label className="text-sm font-semibold text-slate-300">Tipo de Material</label>
+                      <div className="flex bg-slate-900/80 p-1.5 rounded-xl border border-white/5 gap-1">
+                        <button type="button" onClick={() => !loading && setModo('resumido')} disabled={loading}
+                          className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${modo === 'resumido' ? 'bg-primary text-white shadow-lg' : 'hover:bg-white/5 text-slate-400'}`}>
+                          Resumo
+                        </button>
+                        <button type="button" onClick={() => !loading && setModo('completo')} disabled={loading}
+                          className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${modo === 'completo' ? 'bg-primary text-white shadow-lg' : 'hover:bg-white/5 text-slate-400'}`}>
+                          Material Completo
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-6 space-y-4">
+                    <input
+                      ref={(el) => {
+                        (batchInputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+                        if (el) el.setAttribute('webkitdirectory', '');
+                      }}
+                      type="file"
+                      accept=".txt,.vtt,.srt,.md,.csv,.json,.xml,.pdf"
+                      className="absolute w-0 h-0 opacity-0 pointer-events-none overflow-hidden"
+                      aria-hidden
+                      multiple
+                      onChange={handleBatchFolder}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSubmit}
+                      disabled={loading}
+                      className="w-full py-5 rounded-2xl bg-gradient-to-r from-primary to-blue-700 text-white font-black uppercase tracking-widest text-lg neon-glow-primary hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      <span className="material-symbols-outlined">auto_awesome</span>
+                      {loading ? 'Gerando...' : 'Geração Inteligente'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => batchInputRef.current?.click()}
+                      disabled={loading}
+                      className="w-full py-4 rounded-2xl bg-transparent border border-white/10 text-slate-300 font-bold hover:bg-white/5 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-xl">layers</span>
+                      Geração em Lote
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="mt-12 pt-10 border-t border-white/5">
+                <div className="flex justify-between items-end mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${loading ? 'bg-neon-cyan animate-pulse' : 'bg-slate-600'}`} />
+                    <span className="text-sm font-medium text-slate-300">{loading ? progressLabel : 'Pronto para iniciar'}</span>
+                  </div>
+                  {loading && <span className="text-neon-cyan font-black text-xl">{progressStep < PROGRESS_MESSAGES.length ? Math.round(((progressStep + 1) / PROGRESS_MESSAGES.length) * 90) : 90}%</span>}
+                </div>
+                <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden border border-white/5">
+                  <div className="h-full bg-gradient-to-r from-primary to-neon-cyan shadow-[0_0_10px_rgba(0,242,255,0.5)] transition-all duration-500 ease-out" style={{ width: loading ? progressWidth : '0%' }} />
+                </div>
+              </div>
+
+              {isBatchMode && (
+                <p className="mt-3 text-xs text-slate-400">
+                  Lote: {batchIndex + 1} de {batchQueue.length}
+                  {currentBatchFile && ` — ${currentBatchFile.name}`}
+                </p>
               )}
-            </AnimatePresence>
+
+              <AnimatePresence>
+                {error && (
+                  <div className="mt-6 p-4 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 text-sm">{error}</div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* Painel de preview ao lado quando há material gerado */}
           <AnimatePresence>
             {generatedData && (
-              <div className="flex-1 min-w-0 min-h-0 flex flex-col glass rounded-xl shadow-2xl overflow-hidden">
-                <div className="p-4 border-b border-white/20 flex flex-wrap items-center justify-between gap-3">
-                  <span className="text-navy font-semibold">Preview do documento</span>
+              <div className="flex-1 min-w-0 min-h-0 flex flex-col glass-panel rounded-3xl shadow-2xl overflow-hidden border border-white/10">
+                <div className="p-4 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-white font-semibold">Preview do documento</span>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={openPreviewFull}
-                      className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-1"
+                      className="px-4 py-2 bg-gradient-to-r from-primary to-blue-700 text-white text-sm font-semibold rounded-xl hover:brightness-110 transition-colors flex items-center gap-1"
                     >
                       <span className="material-symbols-outlined text-lg">open_in_new</span>
                       Abrir preview completo
@@ -459,7 +542,7 @@ export default function Home() {
                       <button
                         type="button"
                         onClick={() => setGeneratedData(null)}
-                        className="px-4 py-2 bg-white/80 text-navy text-sm font-semibold rounded-lg hover:bg-white transition-colors"
+                        className="px-4 py-2 bg-white/10 text-slate-300 text-sm font-semibold rounded-xl hover:bg-white/20 transition-colors border border-white/10"
                       >
                         Gerar novo
                       </button>
@@ -478,8 +561,8 @@ export default function Home() {
           </AnimatePresence>
         </main>
 
-        <footer className="p-6 text-center text-white/40 dark:text-white/50 text-xs shrink-0">
-          © {new Date().getFullYear()} Design Beleza. Todos os direitos reservados.
+        <footer className="mt-auto py-10 px-6 border-t border-white/5 glass-panel text-center shrink-0">
+          <p className="text-slate-500 text-sm">© {new Date().getFullYear()} Material Beleza - Powered by Advanced Machine Learning. Desenvolvido para o futuro da educação.</p>
         </footer>
       </div>
     </div>

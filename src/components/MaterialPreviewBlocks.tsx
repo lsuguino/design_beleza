@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { PageCoverEditorial } from '@/components/pages/PageCoverEditorial';
+import { PageContraCapa } from '@/components/pages/PageContraCapa';
 import { PageSummary } from '@/components/pages/PageSummary';
 import { PageIntro } from '@/components/pages/PageIntro';
 import { PageDoubleColumn } from '@/components/pages/PageDoubleColumn';
@@ -150,6 +151,16 @@ export function MaterialPreviewBlocks({ data, className = '', scale = 0.4, rende
               subtitle={pagina.subtitulo}
               nomeCurso={nomeCurso}
               primary={primary}
+            />
+          );
+        }
+
+        if (tipo === 'contracapa') {
+          return wrap(
+            <PageContraCapa
+              nomeCurso={nomeCurso}
+              primary={primary}
+              accent={accent}
             />
           );
         }

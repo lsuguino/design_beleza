@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import path from 'path';
+import { PDFParse } from 'pdf-parse';
 import { parseVTT } from '@/lib/vtt-parser';
-import { generateContent } from '@/lib/content-agent';
+import { parseTextoOrganizado } from '@/lib/text-organizado-parser';
+import { generateContent, generateResumoFromOrganizedText } from '@/lib/content-agent';
 import { generateDesign } from '@/lib/design-agent';
 import { COURSE_THEMES, type CourseId } from '@/lib/courseThemes';
 import { getFriendlyErrorMessage } from '@/lib/anthropic-error';
@@ -143,7 +145,9 @@ function applyDefaultDesign(
     const layoutTipo =
       tipo === 'capa'
         ? 'header_destaque'
-        : i === 1
+        : tipo === 'contracapa'
+          ? 'header_destaque'
+          : i === 1
           ? 'imagem_top'
           : i % 3 === 0
             ? 'dois_colunas'
@@ -167,12 +171,20 @@ function applyDefaultDesign(
 
 export async function POST(request: NextRequest) {
   try {
+    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Chave ANTHROPIC_API_KEY não configurada. Adicione no arquivo .env.local.' },
+        { status: 500 }
+      );
+    }
+
     const formData = await request.formData();
 
-    const vttFile = formData.get('vtt') as File | Blob | null;
-    if (!vttFile || (typeof (vttFile as Blob).text !== 'function' && typeof (vttFile as Blob).arrayBuffer !== 'function')) {
+    const inputFile = formData.get('vtt') as File | Blob | null;
+    if (!inputFile || (typeof (inputFile as Blob).text !== 'function' && typeof (inputFile as Blob).arrayBuffer !== 'function')) {
       return NextResponse.json(
-        { error: 'Arquivo VTT não enviado. Selecione um arquivo .vtt e tente novamente.' },
+        { error: 'Arquivo não enviado. Selecione um arquivo de texto ou PDF e tente novamente.' },
         { status: 400 }
       );
     }
@@ -193,17 +205,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let vttContent: string;
-    if (typeof (vttFile as File).text === 'function') {
-      vttContent = await (vttFile as File).text();
+    const tipoEntrada = (formData.get('tipo_entrada') as string | null)?.trim() || 'transcricao';
+    const isTextoOrganizado = tipoEntrada === 'organizado';
+
+    const fileName = (inputFile as File).name?.toLowerCase() || '';
+    const isPdf = fileName.endsWith('.pdf') || (inputFile as Blob).type === 'application/pdf';
+
+    let transcricao: string;
+    if (isPdf) {
+      const buf = await (inputFile as Blob).arrayBuffer();
+      const uint8 = new Uint8Array(buf);
+      const parser = new PDFParse({ data: uint8 });
+      try {
+        const result = await parser.getText();
+        transcricao = (result?.text ?? '').trim();
+        await parser.destroy();
+      } catch (err) {
+        console.error('[api/generate] PDF parse error:', err);
+        return NextResponse.json(
+          { error: 'Não foi possível extrair texto do PDF. Verifique se o arquivo não está corrompido ou protegido.' },
+          { status: 400 }
+        );
+      }
     } else {
-      const buf = await (vttFile as Blob).arrayBuffer();
-      vttContent = new TextDecoder('utf-8').decode(buf);
+      let textContent: string;
+      if (typeof (inputFile as File).text === 'function') {
+        textContent = await (inputFile as File).text();
+      } else {
+        const buf = await (inputFile as Blob).arrayBuffer();
+        textContent = new TextDecoder('utf-8').decode(buf);
+      }
+      transcricao = parseVTT(textContent);
     }
-    const transcricao = parseVTT(vttContent);
     if (!transcricao.trim()) {
       return NextResponse.json(
-        { error: 'O arquivo VTT não contém texto válido.' },
+        { error: 'O arquivo não contém texto válido.' },
         { status: 400 }
       );
     }
@@ -211,11 +247,42 @@ export async function POST(request: NextRequest) {
     const tema = await loadTema(cursoId);
     const nomeCurso = tema.name;
 
-    // 1. Gera o material escrito; o content-agent faz a CONFERÊNCIA (verifica se todo o VTT está no material) antes de retornar.
-    let conteudo = (await generateContent(transcricao, modo, nomeCurso)) as unknown as Record<string, unknown>;
+    // 1. Conteúdo: IA (transcrição) ou parser/IA (texto já organizado)
+    let conteudo: Record<string, unknown>;
+    try {
+      if (isTextoOrganizado) {
+        if (modo === 'resumido') {
+          conteudo = (await generateResumoFromOrganizedText(transcricao, nomeCurso)) as unknown as Record<string, unknown>;
+        } else {
+          conteudo = parseTextoOrganizado(transcricao, nomeCurso) as unknown as Record<string, unknown>;
+        }
+      } else {
+        conteudo = (await generateContent(transcricao, modo, nomeCurso)) as unknown as Record<string, unknown>;
+      }
+    } catch (contentErr) {
+      console.error('[api/generate] Erro na geração de conteúdo:', contentErr);
+      throw contentErr;
+    }
     // Normalizar: garantir "paginas" (a IA pode retornar "pages")
     if (!conteudo.paginas && Array.isArray(conteudo.pages)) {
       conteudo = { ...conteudo, paginas: conteudo.pages };
+    }
+    const paginas = conteudo.paginas as unknown[] | undefined;
+    if (!Array.isArray(paginas) || paginas.length === 0) {
+      return NextResponse.json(
+        { error: 'O conteúdo gerado não retornou páginas válidas. Tente novamente ou use outro arquivo.' },
+        { status: 500 }
+      );
+    }
+    // Resumo de Palestra Master Fluxo: adiciona contra capa ao final
+    if (cursoId === 'master-fluxo' && Array.isArray(conteudo.paginas)) {
+      conteudo = {
+        ...conteudo,
+        paginas: [
+          ...conteudo.paginas,
+          { tipo: 'contracapa', titulo: nomeCurso, subtitulo: 'Master Fluxo' },
+        ],
+      };
     }
 
     // 2. Só após o conteúdo conferido, gera o design (com payload reduzido para resposta mais rápida).
@@ -265,8 +332,9 @@ export async function POST(request: NextRequest) {
     try {
       message = getFriendlyErrorMessage(err);
     } catch {
-      message = 'Erro ao gerar material. Tente novamente.';
+      message = err instanceof Error ? err.message : 'Erro ao gerar material. Tente novamente.';
     }
+    if (!message || message.length > 500) message = 'Erro ao gerar material. Tente novamente.';
     const status =
       typeof err === 'object' &&
       err !== null &&

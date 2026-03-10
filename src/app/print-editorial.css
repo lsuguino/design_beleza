@@ -387,6 +387,55 @@
   right: 0;
 }
 
+/* ========== Contra capa — Resumo de Palestra Master Fluxo ========== */
+.page-contracapa {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20mm;
+  position: relative;
+}
+
+.page-contracapa-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8mm;
+}
+
+.page-contracapa-line {
+  width: 48px;
+  height: 3px;
+  background: var(--print-primary);
+  border-radius: 2px;
+}
+
+.page-contracapa-curso {
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--print-primary);
+}
+
+.page-contracapa-master {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--print-ink-muted);
+}
+
+.page-contracapa .page-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+
 /* ========== Impressão: cada .page em nova folha ========== */
 @media print {
   @page {

@@ -151,6 +151,11 @@ export async function generateContent(
   const limit = TRANSCRIPTION_LIMIT[modo];
   const transcricaoEnviada = transcricao.slice(0, limit);
 
+  const isResumoPalestra = nomeCurso.toLowerCase().includes('resumo de palestra') || nomeCurso.toLowerCase().includes('master fluxo');
+  const capaInstruction = isResumoPalestra
+    ? `CAPA (Resumo de Palestra): titulo = "Resumo" + nome do palestrante (ex: "Resumo — Rodrigo Tadewald"); subtitulo = tema da palestra (ex: "VSL e Metrificação de Funil"); se houver frase de impacto na transcrição, inclua como terceira linha no subtitulo ou em campo separado.`
+    : '';
+
   const userContent = `Transcrição da aula (use EXCLUSIVAMENTE este conteúdo):
 
 ${transcricaoEnviada}
@@ -158,6 +163,7 @@ ${transcricaoEnviada}
 ---
 Modo: ${modo}. Curso: ${nomeCurso}.
 ${modeInstruction}
+${capaInstruction}
 Retorne APENAS o JSON puro, sem cercas de código (sem \`\`\`json ou \`\`\`). Nenhuma página vazia.`;
 
   try {
@@ -183,4 +189,44 @@ Retorne APENAS o JSON puro, sem cercas de código (sem \`\`\`json ou \`\`\`). Ne
     }
     throw err;
   }
+}
+
+/** Prompt para condensar texto já organizado em resumo */
+const PROMPT_RESUMO_ORGANIZADO = `Você é um especialista em redação didática. O texto abaixo JÁ ESTÁ ORGANIZADO (com títulos, seções, listas).
+Sua tarefa: CONDENSAR o conteúdo em um resumo. Mantenha a estrutura (títulos, seções) mas resuma cada bloco para os pontos essenciais.
+Use EXCLUSIVAMENTE o conteúdo fornecido. Não adicione informações externas.
+Retorne APENAS um JSON válido. Sem texto antes ou depois.
+Estrutura JSON: { "titulo": "...", "subtitulo_curso": "nome do curso", "paginas": [ { "tipo": "capa", "titulo": "...", "subtitulo": "..." }, { "tipo": "conteudo", "titulo_bloco": "...", "bloco_principal": "texto resumido...", "destaques": ["ponto 1", "ponto 2"] } ] }
+Cada página de conteúdo deve ter bloco_principal com pelo menos 80 palavras (resumo objetivo) e destaques quando fizer sentido.`;
+
+/**
+ * Condensa texto já organizado em resumo (usa IA para resumir mantendo estrutura).
+ */
+export async function generateResumoFromOrganizedText(
+  texto: string,
+  nomeCurso: string
+): Promise<ContentAgentResult> {
+  const limit = 55000;
+  const textoEnviado = texto.slice(0, limit);
+
+  const userContent = `Texto já organizado (condense em resumo mantendo a estrutura):
+
+${textoEnviado}
+
+---
+Curso: ${nomeCurso}.
+Retorne APENAS o JSON puro, sem cercas de código (sem \`\`\`json ou \`\`\`). Nenhuma página vazia.`;
+
+  const message = await anthropic.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4096,
+    system: PROMPT_RESUMO_ORGANIZADO,
+    messages: [{ role: 'user', content: userContent }],
+  });
+
+  const block = message.content.find((b) => b.type === 'text');
+  const raw = block && 'text' in block ? String(block.text).trim() : '';
+  if (!raw) throw new Error('Resposta vazia do modelo.');
+
+  return parseJsonFromAI<ContentAgentResult>(raw);
 }

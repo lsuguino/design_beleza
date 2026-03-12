@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import path from 'path';
-import { PDFParse } from 'pdf-parse';
 import { parseVTT } from '@/lib/vtt-parser';
 import { parseTextoOrganizado } from '@/lib/text-organizado-parser';
 import { generateContent, generateResumoFromOrganizedText } from '@/lib/content-agent';
 import { generateDesign } from '@/lib/design-agent';
 import { COURSE_THEMES, type CourseId } from '@/lib/courseThemes';
 import { getFriendlyErrorMessage } from '@/lib/anthropic-error';
+import { ensureAnthropicKey } from '@/lib/ensure-env';
 
 export const maxDuration = 300;
 
@@ -171,10 +171,10 @@ function applyDefaultDesign(
 
 export async function POST(request: NextRequest) {
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    const apiKey = await ensureAnthropicKey();
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'Chave ANTHROPIC_API_KEY não configurada. Adicione no arquivo .env.local.' },
+        { error: 'Chave ANTHROPIC_API_KEY não configurada. Adicione no arquivo .env.local na raiz do projeto.' },
         { status: 500 }
       );
     }
@@ -214,9 +214,10 @@ export async function POST(request: NextRequest) {
     let transcricao: string;
     if (isPdf) {
       const buf = await (inputFile as Blob).arrayBuffer();
-      const uint8 = new Uint8Array(buf);
-      const parser = new PDFParse({ data: uint8 });
+      const buffer = Buffer.from(buf);
       try {
+        const { PDFParse } = await import('pdf-parse');
+        const parser = new PDFParse({ data: buffer });
         const result = await parser.getText();
         transcricao = (result?.text ?? '').trim();
         await parser.destroy();

@@ -3,14 +3,13 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { TeachingMaterial } from '@/types/material';
 import type { CourseId, GenerationMode } from '@/lib/courseThemes';
 import { parseJsonFromAI } from '@/lib/parse-json-from-ai';
+import { ensureAnthropicKey } from '@/lib/ensure-env';
 
 // Tempo máximo da rota (segundos). Aumentado para transcrições longas (ex.: Vercel Pro permite até 300).
 export const maxDuration = 300;
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
-
 /** Usa o Claude para refinar o prompt de imagem: mais detalhado e adequado para material didático. */
-async function refineImagePromptWithClaude(originalPrompt: string): Promise<string> {
+async function refineImagePromptWithClaude(anthropic: Anthropic, originalPrompt: string): Promise<string> {
   try {
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -102,14 +101,14 @@ async function generateImageDataUrl(prompt: string): Promise<string | null> {
 }
 
 /** Refina o prompt com Claude e preenche imageUrl em todos os image_placeholder. */
-async function fillImagePlaceholders(material: TeachingMaterial): Promise<void> {
+async function fillImagePlaceholders(anthropic: Anthropic, material: TeachingMaterial): Promise<void> {
   if (!material.sections) return;
   for (const section of material.sections) {
     if (!section.blocks) continue;
     for (const block of section.blocks) {
       if (block.type !== 'image_placeholder' || block.imageUrl) continue;
       if (!block.imagePrompt?.trim()) continue;
-      const refinedPrompt = await refineImagePromptWithClaude(block.imagePrompt.trim());
+      const refinedPrompt = await refineImagePromptWithClaude(anthropic, block.imagePrompt.trim());
       const dataUrl = await generateImageDataUrl(refinedPrompt);
       if (dataUrl) block.imageUrl = dataUrl;
     }
@@ -117,7 +116,7 @@ async function fillImagePlaceholders(material: TeachingMaterial): Promise<void> 
 }
 
 /** Gera imagem da capa temática (ex.: tráfego pago = workspace, ads, gráficos). */
-async function generateCoverImage(material: TeachingMaterial): Promise<void> {
+async function generateCoverImage(anthropic: Anthropic, material: TeachingMaterial): Promise<void> {
   const theme = [material.title, material.subtitle, material.summary].filter(Boolean).join('. ').slice(0, 500);
   if (!theme.trim()) return;
   try {
@@ -199,12 +198,14 @@ Extraia da transcrição os 6 a 12 conceitos/ramos mais importantes. "items" dev
 `;
 
 export async function POST(request: NextRequest) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const apiKey = await ensureAnthropicKey();
+  if (!apiKey) {
     return NextResponse.json(
       { error: 'ANTHROPIC_API_KEY não configurada. Adicione em .env.local' },
       { status: 503 }
     );
   }
+  const anthropic = new Anthropic({ apiKey });
   try {
     const body = await request.json();
     const { transcript, mode = 'full', courseId } = body as {
@@ -295,8 +296,8 @@ ${mindmapSchema}`;
     };
 
     if (!isMindmap) {
-      await fillImagePlaceholders(material);
-      await generateCoverImage(material);
+      await fillImagePlaceholders(anthropic, material);
+      await generateCoverImage(anthropic, material);
     }
 
     return NextResponse.json(material);

@@ -1,7 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { parseJsonFromAI } from '@/lib/parse-json-from-ai';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
+function getAnthropic(): Anthropic {
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
+}
 
 const SYSTEM_PROMPT_BASE = `Você é um especialista em redação didática e construção de materiais educacionais para cursos online. Sua tarefa é transformar a transcrição de aula fornecida em conteúdo estruturado para estudo E sugerir elementos visuais (imagens, gráficos, fluxogramas, tabelas, ícones) sempre que o texto justificar. Essas sugestões serão usadas pela IA de design na diagramação final.
 
@@ -167,6 +169,7 @@ ${capaInstruction}
 Retorne APENAS o JSON puro, sem cercas de código (sem \`\`\`json ou \`\`\`). Nenhuma página vazia.`;
 
   try {
+    const anthropic = getAnthropic();
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
@@ -217,6 +220,7 @@ ${textoEnviado}
 Curso: ${nomeCurso}.
 Retorne APENAS o JSON puro, sem cercas de código (sem \`\`\`json ou \`\`\`). Nenhuma página vazia.`;
 
+  const anthropic = getAnthropic();
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 4096,

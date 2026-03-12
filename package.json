@@ -6,13 +6,13 @@
     "node": ">=18"
   },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "serve": "npm run build && next start",
-    "lint": "next lint",
-    "pdf": "node scripts/generate-pdf.js",
-    "images:book": "node scripts/generate-images-for-book.js"
+  "dev": "next dev --webpack",
+  "build": "next build",
+  "start": "next start",
+  "serve": "npm run build && next start",
+  "lint": "next lint",
+  "pdf": "node scripts/generate-pdf.js",
+  "images:book": "node scripts/generate-images-for-book.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -21,7 +21,7 @@
     "chart.js": "^4.5.1",
     "framer-motion": "^11.18.2",
     "mermaid": "^11.12.3",
-    "next": "^14.2.0",
+    "next": "^16.1.6",
     "openai": "^6.25.0",
     "pdf-parse": "^2.4.5",
     "puppeteer": "^23.11.1",

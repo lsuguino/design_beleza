@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { getFriendlyErrorMessage } from '@/lib/anthropic-error';
+import { ensureAnthropicKey } from '@/lib/ensure-env';
 
 /**
  * GET /api/check-credits
  * Faz uma chamada mínima à API Anthropic para verificar se a chave está válida e há créditos.
  */
 export async function GET() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey || apiKey.trim() === '') {
+  const apiKey = await ensureAnthropicKey();
+  if (!apiKey) {
     return NextResponse.json(
       { ok: false, error: 'ANTHROPIC_API_KEY não está configurada no .env.local' },
       { status: 200 }

@@ -7,7 +7,7 @@ import { generateContent, generateResumoFromOrganizedText } from '@/lib/content-
 import { generateDesign } from '@/lib/design-agent';
 import { COURSE_THEMES, type CourseId } from '@/lib/courseThemes';
 import { getFriendlyErrorMessage } from '@/lib/anthropic-error';
-import { ensureAnthropicKey } from '@/lib/ensure-env';
+import { ensureOpenRouterKey } from '@/lib/ensure-env';
 
 export const maxDuration = 300;
 
@@ -171,13 +171,14 @@ function applyDefaultDesign(
 
 export async function POST(request: NextRequest) {
   try {
-    const apiKey = await ensureAnthropicKey();
+    const apiKey = await ensureOpenRouterKey();
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'Chave ANTHROPIC_API_KEY não configurada. Adicione no arquivo .env.local na raiz do projeto.' },
+        { error: 'Chave OPENROUTER_API_KEY não configurada. Adicione no arquivo .env.local na raiz do projeto.' },
         { status: 500 }
       );
     }
+    process.env.OPENROUTER_API_KEY = apiKey;
 
     const formData = await request.formData();
 

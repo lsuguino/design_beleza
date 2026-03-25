@@ -1,10 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
 import type { CourseTheme } from '@/lib/courseThemes';
+import { openRouterChat } from '@/lib/openrouter';
 import { parseJsonFromAI } from '@/lib/parse-json-from-ai';
-
-function getAnthropic(): Anthropic {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
-}
 
 /** Tipos de layout que o agente de design pode atribuir a uma página */
 export type LayoutTipo =
@@ -94,16 +90,11 @@ ${conteudoJson}
 
 Retorne o mesmo JSON com os campos de design em cada página. Apenas JSON, sem markdown.`;
 
-  const anthropic = getAnthropic();
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 3072,
+  const raw = await openRouterChat({
     system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userContent }],
+    user: userContent,
+    max_tokens: 3072,
   });
-
-  const block = message.content.find((b) => b.type === 'text');
-  const raw = block && 'text' in block ? String(block.text).trim() : '';
   if (!raw) {
     throw new Error('Resposta vazia do modelo de design.');
   }

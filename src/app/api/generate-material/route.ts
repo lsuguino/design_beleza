@@ -1,27 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
 import type { TeachingMaterial } from '@/types/material';
 import type { CourseId, GenerationMode } from '@/lib/courseThemes';
 import { parseJsonFromAI } from '@/lib/parse-json-from-ai';
-import { ensureAnthropicKey } from '@/lib/ensure-env';
+import { ensureOpenRouterKey } from '@/lib/ensure-env';
+import { openRouterChat } from '@/lib/openrouter';
 
 // Tempo máximo da rota (segundos). Aumentado para transcrições longas (ex.: Vercel Pro permite até 300).
 export const maxDuration = 300;
 
-/** Usa o Claude para refinar o prompt de imagem: mais detalhado e adequado para material didático. */
-async function refineImagePromptWithClaude(anthropic: Anthropic, originalPrompt: string): Promise<string> {
+/** Refina o prompt de imagem via LLM (OpenRouter): mais detalhado e adequado para material didático. */
+async function refineImagePromptWithLlm(originalPrompt: string): Promise<string> {
   try {
-    const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 256,
+    const text = await openRouterChat({
       system: `You are an expert at writing prompts for AI image generation. Given a short prompt for an educational or didactic illustration, return ONLY one improved, detailed prompt in English (1-2 sentences). The result must be professional, clear, suitable for study handouts. Style: clean, illustrative, easy to understand. No explanation or quotes—output only the prompt.`,
-      messages: [{ role: 'user', content: originalPrompt.slice(0, 500) }],
+      user: originalPrompt.slice(0, 500),
+      max_tokens: 256,
     });
-    const block = msg.content.find((b) => b.type === 'text');
-    const text = block && 'text' in block ? String(block.text).trim() : '';
     return text.length > 0 ? text : originalPrompt;
   } catch (e) {
-    console.error('refineImagePromptWithClaude error:', e);
+    console.error('refineImagePromptWithLlm error:', e);
     return originalPrompt;
   }
 }
@@ -100,15 +97,15 @@ async function generateImageDataUrl(prompt: string): Promise<string | null> {
   return generateImageWithOpenAI(prompt);
 }
 
-/** Refina o prompt com Claude e preenche imageUrl em todos os image_placeholder. */
-async function fillImagePlaceholders(anthropic: Anthropic, material: TeachingMaterial): Promise<void> {
+/** Refina o prompt com LLM e preenche imageUrl em todos os image_placeholder. */
+async function fillImagePlaceholders(material: TeachingMaterial): Promise<void> {
   if (!material.sections) return;
   for (const section of material.sections) {
     if (!section.blocks) continue;
     for (const block of section.blocks) {
       if (block.type !== 'image_placeholder' || block.imageUrl) continue;
       if (!block.imagePrompt?.trim()) continue;
-      const refinedPrompt = await refineImagePromptWithClaude(anthropic, block.imagePrompt.trim());
+      const refinedPrompt = await refineImagePromptWithLlm(block.imagePrompt.trim());
       const dataUrl = await generateImageDataUrl(refinedPrompt);
       if (dataUrl) block.imageUrl = dataUrl;
     }
@@ -116,13 +113,11 @@ async function fillImagePlaceholders(anthropic: Anthropic, material: TeachingMat
 }
 
 /** Gera imagem da capa temática (ex.: tráfego pago = workspace, ads, gráficos). */
-async function generateCoverImage(anthropic: Anthropic, material: TeachingMaterial): Promise<void> {
+async function generateCoverImage(material: TeachingMaterial): Promise<void> {
   const theme = [material.title, material.subtitle, material.summary].filter(Boolean).join('. ').slice(0, 500);
   if (!theme.trim()) return;
   try {
-    const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 220,
+    const text = await openRouterChat({
       system: `You write a single, detailed prompt in English for an AI image generator. The image will be the COVER of a study handout (apostila).
 
 Rules:
@@ -131,13 +126,9 @@ Rules:
 - For other topics: suggest a concrete scene that a student would associate with that subject (tools, environment, action).
 - Style: professional, modern, clean, suitable for education. Soft lighting. No long paragraphs of text in the image; icons, numbers and short labels (e.g. "Ads", "114K") are OK.
 - Output ONLY the prompt, 1-3 sentences, no quotes or explanation.`,
-      messages: [{
-        role: 'user',
-        content: `Theme of the study material:\n${theme}\n\nWrite a detailed image prompt for the cover that depicts a concrete, thematic scene (e.g. for "tráfego pago": professional workspace with laptop, smartphone, ads dashboard, charts and metrics, holographic UI, modern).`,
-      }],
+      user: `Theme of the study material:\n${theme}\n\nWrite a detailed image prompt for the cover that depicts a concrete, thematic scene (e.g. for "tráfego pago": professional workspace with laptop, smartphone, ads dashboard, charts and metrics, holographic UI, modern).`,
+      max_tokens: 220,
     });
-    const block = msg.content.find((b) => b.type === 'text');
-    const text = block && 'text' in block ? String(block.text).trim() : '';
     if (!text) return;
     // Usar prompt temático direto (sem refino) para manter cena concreta (ex.: tráfego pago = workspace, ads, gráficos)
     const dataUrl = await generateImageDataUrl(text);
@@ -198,14 +189,14 @@ Extraia da transcrição os 6 a 12 conceitos/ramos mais importantes. "items" dev
 `;
 
 export async function POST(request: NextRequest) {
-  const apiKey = await ensureAnthropicKey();
+  const apiKey = await ensureOpenRouterKey();
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'ANTHROPIC_API_KEY não configurada. Adicione em .env.local' },
+      { error: 'OPENROUTER_API_KEY não configurada. Adicione em .env.local' },
       { status: 503 }
     );
   }
-  const anthropic = new Anthropic({ apiKey });
+  process.env.OPENROUTER_API_KEY = apiKey;
   try {
     const body = await request.json();
     const { transcript, mode = 'full', courseId } = body as {
@@ -276,15 +267,11 @@ ${mindmapSchema}`;
       ? `Transcrição da aula:\n\n${transcript.slice(0, 80000)}`
       : `Transcrição da aula:\n\n${transcript.slice(0, 120000)}`;
 
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: isMindmap ? 2048 : 8192,
+    const raw = await openRouterChat({
       system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
+      user: userPrompt,
+      max_tokens: isMindmap ? 2048 : 8192,
     });
-
-    const textBlock = message.content.find((block) => block.type === 'text');
-    const raw = textBlock && 'text' in textBlock ? String(textBlock.text).trim() : '';
     if (!raw) {
       return NextResponse.json({ error: 'Resposta vazia do modelo.' }, { status: 502 });
     }
@@ -296,8 +283,8 @@ ${mindmapSchema}`;
     };
 
     if (!isMindmap) {
-      await fillImagePlaceholders(anthropic, material);
-      await generateCoverImage(anthropic, material);
+      await fillImagePlaceholders(material);
+      await generateCoverImage(material);
     }
 
     return NextResponse.json(material);

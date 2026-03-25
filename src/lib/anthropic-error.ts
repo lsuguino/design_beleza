@@ -1,5 +1,5 @@
 /**
- * Mensagens amigáveis para erros da API Anthropic (e similares).
+ * Mensagens amigáveis para erros de APIs de LLM (OpenRouter, Anthropic, etc.).
  */
 
 function getMessageFromBody(obj: unknown): string | null {
@@ -34,16 +34,21 @@ function toFriendlyMessage(englishMessage: string): string {
   if (
     lower.includes('credit balance') ||
     lower.includes('too low') ||
-    lower.includes('insufficient')
+    lower.includes('insufficient') ||
+    lower.includes('insufficient credits') ||
+    lower.includes('payment required') ||
+    lower.includes('402')
   ) {
-    return 'Saldo de créditos da Anthropic insuficiente. Acesse console.anthropic.com → Plans & Billing para adicionar créditos ou fazer upgrade do plano.';
+    return 'Saldo ou créditos insuficientes no provedor de IA (OpenRouter). Acesse openrouter.ai → Credits / Billing e adicione créditos.';
   }
   if (
     lower.includes('invalid_api_key') ||
     lower.includes('authentication') ||
-    lower.includes('api key')
+    lower.includes('api key') ||
+    lower.includes('401') ||
+    lower.includes('unauthorized')
   ) {
-    return 'Chave da API Anthropic inválida ou expirada. Verifique ANTHROPIC_API_KEY no arquivo .env.local.';
+    return 'Chave da API inválida ou expirada. Verifique OPENROUTER_API_KEY no arquivo .env.local.';
   }
   if (lower.includes('rate limit') || lower.includes('overloaded')) {
     return 'Muitas requisições no momento. Aguarde alguns segundos e tente novamente.';

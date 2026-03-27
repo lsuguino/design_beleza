@@ -50,6 +50,27 @@ function applyVtsdReferenceImages(material: TeachingMaterial, courseId?: CourseI
   }
 }
 
+function materialTextChars(material: Omit<TeachingMaterial, 'createdAt'>): number {
+  let total = 0;
+  total += material.title?.length ?? 0;
+  total += material.subtitle?.length ?? 0;
+  total += material.summary?.length ?? 0;
+  for (const section of material.sections || []) {
+    total += section.title?.length ?? 0;
+    for (const block of section.blocks || []) {
+      total += block.content?.length ?? 0;
+      total += block.caption?.length ?? 0;
+      total += block.source?.length ?? 0;
+      total += block.center?.length ?? 0;
+      total += block.diagramTitle?.length ?? 0;
+      for (const item of block.items || []) total += item.length;
+      for (const step of block.steps || []) total += step.length;
+      for (const label of block.chartLabels || []) total += label.length;
+    }
+  }
+  return total;
+}
+
 /** Refina o prompt de imagem via LLM (OpenRouter): mais detalhado e adequado para material didático. */
 async function refineImagePromptWithLlm(originalPrompt: string): Promise<string> {
   try {
@@ -269,8 +290,12 @@ OBJETIVO DA APOSTILA:
 
 Regras obrigatórias:
 1. CONTEÚDO: Reescreva de forma didática e abrangente — conceitos claros, definições completas, passos, justificativas e conclusões. O aluno lendo a apostila deve conseguir entender e aplicar o que foi ensinado sem depender do vídeo.
-2. EXEMPLOS DO PROFESSOR: Toda vez que o professor citar um exemplo, caso, exercício ou situação na aula, inclua no material com o tipo de block "example". Transcreva o exemplo de forma completa (números, nomes, contexto), para o aluno poder estudar e revisar como foi dado em aula.
-3. ESTRUTURA: Organize em seções com títulos. Use "key_point" para ideias centrais, listas para enumerações e "quote" para citações literais do professor quando relevante.
+2. EXEMPLOS DO PROFESSOR (OBRIGATÓRIO — LEITURA EM LISTA): Toda vez que o professor citar exemplo, pergunta ilustrativa, diálogo, caso ou situação, transcreva fielmente. Apresente para leitura fácil: **prefira um block "list" com um item por exemplo** (texto completo de cada ilustração). Opcionalmente um "paragraph" curto antes para contextualizar. Pode usar um único block "example" só quando houver apenas um exemplo isolado naquele trecho.
+2.1 Não agrupe vários exemplos distintos em um único parágrafo denso sem lista.
+2.2 Não omita exemplos relevantes. PROIBIDO inventar exemplos não citados no VTT.
+3. ESTRUTURA: Organize em seções com títulos. Prefira "paragraph" para explicações. Use "key_point" só para ideias realmente centrais. Use listas ("list") APENAS quando houver enumeração clara na fala do professor (itens, passos, “primeiro/segundo/terceiro”). Evite transformar o material inteiro em bullet points.
+3.1 REGRA DE PROPORÇÃO (ORIENTADORA): predominância de "paragraph" nas explicações. Blocks "list" são esperados para enumerações do professor e **obrigatoriamente para listar exemplos citados** (um item por exemplo); isso não é “excesso indevido” de bullets.
+3.2 Não gere seção composta apenas por tópicos. Cada seção deve ter explicação em parágrafo desenvolvido antes de qualquer lista.
 4. MAPA MENTAL: Em seções que forem um "resumo da estratégia completa", "visão geral", "síntese" ou equivalente, inclua SEMPRE um block "mind_map" com "center" e "items" (4 a 8 ramos). Os "items" devem ser os pontos realmente abordados na aula, não inventados.
 5. DENSIDADE MÍNIMA (OBRIGATÓRIA): cada seção deve conter explicação suficiente, evitando blocos rasos. Prefira parágrafos mais desenvolvidos com contexto e transições. Não gere seções com conteúdo telegráfico.
 6. COBERTURA INTEGRAL (OBRIGATÓRIA): ao final, confira mentalmente a transcrição completa e garanta que todos os tópicos relevantes foram contemplados em alguma seção.
@@ -287,14 +312,16 @@ Resumo executivo (summary): 4 a 6 frases com os principais pontos da aula, para 
 LEMBRE-SE: Gráficos, fluxogramas e imagens devem refletir APENAS o que foi dito na transcrição. Em dúvida, omita o bloco em vez de inventar dados.
 ${materialSchema}`;
 
-    const systemPromptSummary = `Você é um expert em didática. Transforme a transcrição de uma aula (.vtt) em um MATERIAL RESUMIDO para revisão rápida.
+    const systemPromptSummary = `Você é um expert em didática. Transforme a transcrição de uma aula (.vtt) em um MATERIAL RESUMIDO para revisão rápida, mas ainda didático e fácil de compreender.
 
 REGRA CRÍTICA — USE SOMENTE O VTT:
 - Todo o conteúdo deve vir EXCLUSIVAMENTE da transcrição do arquivo .vtt. NÃO faça pesquisa externa. NÃO invente dados ou exemplos que não estejam no texto.
 
 Regras:
-- Estrutura enxuta: poucas seções (3 a 5), parágrafos curtos, muitas listas e key_point.
-- Inclua só os conceitos essenciais, definições e conclusões. Menos texto, mais tópicos.
+- Estrutura enxuta: poucas seções (3 a 5), porém com EXPLICAÇÃO em texto corrido (paragraph). Evite ficar só em tópicos.
+- Use listas (list) APENAS quando houver enumeração clara na fala do professor. Não transforme o material inteiro em bullets.
+- No mínimo 80% dos blocks devem ser "paragraph"; listas e key_points no máximo 20%.
+- Inclua os conceitos essenciais, definições e conclusões, com contexto suficiente para entendimento (mesmo no resumido).
 - Use **termo** para destacar conceitos-chave.
 - NÃO inclua image_placeholder, chart ou flowchart a menos que seja essencial e esteja explícito na transcrição.
 - Resumo executivo (summary): 2 a 4 frases.
@@ -309,20 +336,54 @@ ${mindmapSchema}`;
         ? systemPromptSummary
         : systemPromptFull;
 
-    const userPrompt = isMindmap
-      ? `Transcrição da aula:\n\n${transcript.slice(0, 80000)}`
-      : `Transcrição da aula:\n\n${transcript.slice(0, 120000)}`;
+    const transcriptForModel = isMindmap ? transcript.slice(0, 80000) : transcript.slice(0, 120000);
+    const userPromptBase = `Transcrição da aula:\n\n${transcriptForModel}`;
+    const minCharsTarget = isMindmap
+      ? 0
+      : isSummary
+        ? Math.floor(transcriptForModel.length * 0.6)
+        : Math.min(Math.floor(transcriptForModel.length * 0.75), 42000);
 
-    const raw = await openRouterChat({
-      system: systemPrompt,
-      user: userPrompt,
-      max_tokens: isMindmap ? 2048 : 8192,
-    });
-    if (!raw) {
-      return NextResponse.json({ error: 'Resposta vazia do modelo.' }, { status: 502 });
+    let parsed: Omit<TeachingMaterial, 'createdAt'> | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const userPrompt =
+        attempt === 0
+          ? userPromptBase
+          : `${userPromptBase}
+
+ATENÇÃO: a tentativa anterior ficou curta para estudo autossuficiente.
+- Expanda o conteúdo com mais detalhes e explicações didáticas, sem inventar dados.
+- Inclua TODOS os exemplos citados pelo professor (em blocks "example" e/ou bullets quando necessário), sem inventar exemplos.
+- Preserve 100% de fidelidade ao VTT.
+- Garanta no mínimo ${minCharsTarget} caracteres de conteúdo textual no JSON final.`;
+
+      const raw = await openRouterChat({
+        system: systemPrompt,
+        user: userPrompt,
+        max_tokens: isMindmap ? 2048 : 12000,
+      });
+      if (!raw) {
+        if (attempt === 2) {
+          return NextResponse.json({ error: 'Resposta vazia do modelo.' }, { status: 502 });
+        }
+        continue;
+      }
+
+      try {
+        const candidate = parseJsonFromAI<Omit<TeachingMaterial, 'createdAt'>>(raw);
+        const chars = materialTextChars(candidate);
+        if (isMindmap || chars >= minCharsTarget || attempt === 2) {
+          parsed = candidate;
+          break;
+        }
+      } catch (parseErr) {
+        if (attempt === 2) throw parseErr;
+      }
+    }
+    if (!parsed) {
+      return NextResponse.json({ error: 'Não foi possível gerar conteúdo com densidade adequada.' }, { status: 502 });
     }
 
-    const parsed = parseJsonFromAI<Omit<TeachingMaterial, 'createdAt'>>(raw);
     const material: TeachingMaterial = {
       ...parsed,
       createdAt: new Date().toISOString(),

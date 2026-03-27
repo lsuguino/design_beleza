@@ -69,6 +69,85 @@ async function loadTema(cursoId: string): Promise<TemaPayload> {
   }
 }
 
+/** Para VTSD (curso_id=geral), garante intro e sumário de referência após capa. */
+function injectVtsdReferencePages(conteudo: Record<string, unknown>): Record<string, unknown> {
+  const paginas = conteudo.paginas as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(paginas) || paginas.length === 0) return conteudo;
+
+  const hasIntroRef = paginas.some((p) => p.tipo === 'intro_ref');
+  const hasSummaryRef = paginas.some((p) => p.tipo === 'sumario_ref');
+  if (hasIntroRef && hasSummaryRef) return conteudo;
+
+  const capaIdx = paginas.findIndex((p) => p.tipo === 'capa');
+  if (capaIdx < 0) return conteudo;
+
+  const novas = [...paginas];
+  let insertAt = capaIdx + 1;
+  if (!hasIntroRef) {
+    novas.splice(insertAt, 0, { tipo: 'intro_ref', titulo: 'Introdução' });
+    insertAt += 1;
+  }
+  if (!hasSummaryRef) {
+    novas.splice(insertAt, 0, { tipo: 'sumario_ref', titulo: 'Sumário' });
+  }
+  return { ...conteudo, paginas: novas };
+}
+
+function toWordCount(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Compacta páginas de conteúdo muito curtas quando não há imagem/diagrama,
+ * permitindo continuar o próximo tópico na mesma página para reduzir áreas em branco.
+ */
+function compactSparseContentPages(conteudo: Record<string, unknown>): Record<string, unknown> {
+  const paginas = conteudo.paginas as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(paginas) || paginas.length < 2) return conteudo;
+
+  const canMerge = (p: Record<string, unknown>): boolean => {
+    if ((p.tipo as string | undefined) !== 'conteudo') return false;
+    const hasVisualHint = Boolean(
+      p.content_blocks ||
+      p.sugestao_imagem ||
+      p.prompt_imagem ||
+      p.sugestao_grafico ||
+      p.sugestao_fluxograma ||
+      p.sugestao_tabela
+    );
+    return !hasVisualHint;
+  };
+
+  const result: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < paginas.length; i++) {
+    const current = { ...paginas[i] };
+    const next = paginas[i + 1];
+
+    if (!next || !canMerge(current) || !canMerge(next)) {
+      result.push(current);
+      continue;
+    }
+
+    const curText = String(current.bloco_principal ?? '');
+    const nextText = String(next.bloco_principal ?? '');
+    const combinedWords = toWordCount(curText) + toWordCount(nextText);
+
+    // Só compacta quando os dois blocos são curtos e cabem confortavelmente numa página.
+    if (combinedWords <= 420) {
+      const nextTitle = String(next.titulo_bloco ?? next.titulo ?? '').trim();
+      current.bloco_principal = `${curText.trim()}\n\n${nextTitle ? `${nextTitle}\n` : ''}${nextText.trim()}`.trim();
+      const curD = Array.isArray(current.destaques) ? (current.destaques as string[]) : [];
+      const nextD = Array.isArray(next.destaques) ? (next.destaques as string[]) : [];
+      current.destaques = [...curD, ...nextD].slice(0, 8);
+      i += 1; // consome página seguinte
+    }
+
+    result.push(current);
+  }
+
+  return { ...conteudo, paginas: result };
+}
+
 /** Reduz o conteúdo para o design-agent (só estrutura + trechos curtos) para menos tokens e resposta mais rápida */
 function buildContentForDesign(conteudo: Record<string, unknown>): Record<string, unknown> {
   const paginas = conteudo.paginas as Array<Record<string, unknown>> | undefined;
@@ -301,7 +380,12 @@ export async function POST(request: NextRequest) {
           backgroundColor: tema.backgroundColor,
         };
 
-    const conteudoRecord = conteudo as unknown as Record<string, unknown>;
+    const conteudoComCompactacao = compactSparseContentPages(conteudo as unknown as Record<string, unknown>);
+    const conteudoAjustado = cursoId === 'geral'
+      ? injectVtsdReferencePages(conteudoComCompactacao)
+      : conteudoComCompactacao;
+
+    const conteudoRecord = conteudoAjustado;
     let conteudoComDesign: Record<string, unknown>;
 
     try {

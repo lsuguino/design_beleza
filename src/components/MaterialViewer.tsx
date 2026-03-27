@@ -301,7 +301,7 @@ export function MaterialViewer({ material, courseId = 'geral' }: MaterialViewerP
               <span>{moduleName}</span>
               <span className="text-right leading-tight">
                 <span className="block">Aula</span>
-                <span className="block font-semibold text-[26px] md:text-[40px]">Numero da aula {lessonNumber}</span>
+                <span className="block font-semibold text-[26px] md:text-[40px]">Nº {lessonNumber}</span>
               </span>
             </div>
             <h1 className="mt-4 text-[36px] md:text-[54px] font-bold leading-[1.05] tracking-tight max-w-[90%]">
@@ -369,14 +369,29 @@ export function MaterialViewer({ material, courseId = 'geral' }: MaterialViewerP
       {isVtsd ? (
         <nav className="relative print:break-after-page min-h-[720px] overflow-hidden" aria-label="Sumário">
           <img src="/images/sumario-vtsd.png" alt="" className="absolute inset-0 w-full h-full object-cover" />
-          <div className="relative z-10 px-12 md:px-16 pt-40 md:pt-48 pb-16">
-            <ol className="list-none space-y-3 max-w-3xl ml-auto">
-              {material.sections?.map((section, idx) => (
-                <li key={idx} className="flex items-baseline gap-4 font-display text-lg md:text-2xl text-[#0c8f8a]">
-                  <span className="font-semibold w-10 shrink-0">{String(idx + 1).padStart(2, '0')}</span>
-                  <span className="font-semibold">{section.title}</span>
-                </li>
-              ))}
+          <div className="relative z-10 px-10 md:px-16 pt-44 md:pt-52 pb-16 flex flex-col items-center justify-start">
+            <ol className="list-none space-y-3 md:space-y-3.5 w-full max-w-3xl mt-10 md:mt-14">
+              {material.sections?.map((section, idx) => {
+                const startPage = 4 + idx;
+                return (
+                  <li
+                    key={idx}
+                    className="flex w-full items-baseline gap-2 font-display text-base md:text-xl text-[#0c8f8a]"
+                  >
+                    <span className="font-semibold w-9 shrink-0 text-right tabular-nums">
+                      {String(idx + 1).padStart(2, '0')}
+                    </span>
+                    <span className="font-semibold min-w-0 shrink leading-snug">{section.title}</span>
+                    <span
+                      className="flex-1 min-w-[1rem] border-b-2 border-dotted border-[#0c8f8a]/40 mb-1 mx-0.5"
+                      aria-hidden
+                    />
+                    <span className="shrink-0 tabular-nums font-semibold w-8 text-right" aria-label={`Página ${startPage}`}>
+                      {startPage}
+                    </span>
+                  </li>
+                );
+              })}
             </ol>
           </div>
         </nav>

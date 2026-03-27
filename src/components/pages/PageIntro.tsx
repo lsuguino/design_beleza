@@ -1,6 +1,7 @@
 'use client';
 
-import { ContentBlocksRenderer, type ContentBlockItem } from '@/components/ContentBlocksRenderer';
+import { ContentBlocksRenderer, renderParagraphParts, type ContentBlockItem } from '@/components/ContentBlocksRenderer';
+import { contentBlocksTextCharCount, MIN_CHARS_TEXT_IN_BLOCKS } from '@/lib/normalize-content-blocks';
 
 /** Template: imagem de topo sangrada + bloco de cor lateral (Corporate Editorial) */
 
@@ -35,6 +36,10 @@ export function PageIntro({
     hasContentBlocks && contentBlocks
       ? contentBlocks.filter((_, i) => i !== firstImageIndex)
       : undefined;
+  const bodyTextChars = contentBlocksTextCharCount(bodyBlocks ?? []);
+  const showParagraphs =
+    paragraphs.length > 0 &&
+    (!bodyBlocks?.length || bodyTextChars < MIN_CHARS_TEXT_IN_BLOCKS);
 
   return (
     <section
@@ -56,11 +61,8 @@ export function PageIntro({
       </div>
       <div className="page-body">
         <h2>{title}</h2>
-        {bodyBlocks && bodyBlocks.length > 0 ? (
-          <ContentBlocksRenderer blocks={bodyBlocks} />
-        ) : (
-          paragraphs.map((p, i) => <p key={i}>{p}</p>)
-        )}
+        {bodyBlocks && bodyBlocks.length > 0 ? <ContentBlocksRenderer blocks={bodyBlocks} /> : null}
+        {showParagraphs ? renderParagraphParts(paragraphs, 'intro-body') : null}
       </div>
       <div className="page-sidebar" aria-hidden />
       <footer className="page-footer">

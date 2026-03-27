@@ -6,7 +6,12 @@ import { PageContraCapa } from '@/components/pages/PageContraCapa';
 import { PageSummary } from '@/components/pages/PageSummary';
 import { PageIntro } from '@/components/pages/PageIntro';
 import { PageDoubleColumn } from '@/components/pages/PageDoubleColumn';
-import type { ContentBlockItem } from '@/components/ContentBlocksRenderer';
+import { renderParagraphParts, type ContentBlockItem } from '@/components/ContentBlocksRenderer';
+import {
+  normalizeContentBlocks,
+  collectPageTextParts,
+  shouldAppendPageTextFallback,
+} from '@/lib/normalize-content-blocks';
 
 export type { ContentBlockItem };
 
@@ -60,6 +65,23 @@ interface MaterialPreviewBlocksProps {
   renderPageWrapper?: (pageNode: React.ReactNode, index: number) => React.ReactNode;
 }
 
+function extractLessonNumber(title: string): string {
+  const m = title.match(/\b(\d{1,3})\b/);
+  return m?.[1] ?? '01';
+}
+
+/** Número da página (1-based) em que cada seção `conteudo` começa, na ordem do PDF/preview. */
+function computeTocStartPages(paginas: PaginaDesign[]): number[] {
+  const starts: number[] = [];
+  let pageNum = 0;
+  for (const p of paginas) {
+    pageNum += 1;
+    const tipo = p.tipo || 'conteudo';
+    if (tipo === 'conteudo') starts.push(pageNum);
+  }
+  return starts;
+}
+
 /** Decide template editorial: summary (lista numerada), intro (imagem topo), double_column */
 function chooseEditorialTemplate(
   pagina: PaginaDesign,
@@ -96,6 +118,13 @@ export function MaterialPreviewBlocks({ data, className = '', scale = 0.4, rende
   const tituloGeral = design?.titulo || 'Material gerado';
   const primary = tema.primary ?? '#0f1823';
   const accent = tema.accent ?? tema.primary ?? '#006eff';
+  const isVtsd = data.curso_id === 'geral';
+  const moduleName = (design as { subtitulo_curso?: string })?.subtitulo_curso || nomeCurso;
+  const lessonNumber = extractLessonNumber(tituloGeral);
+  const tocItems = paginas
+    .filter((p) => (p.tipo || 'conteudo') === 'conteudo')
+    .map((p) => (p.titulo_bloco ?? p.titulo ?? 'Conteúdo').toString());
+  const tocStartPages = computeTocStartPages(paginas);
 
   if (paginas.length === 0) {
     return (
@@ -110,6 +139,21 @@ export function MaterialPreviewBlocks({ data, className = '', scale = 0.4, rende
   // Garantir área rolável quando scale < 1 (transform não altera layout flow)
   const minHeight = scale < 1 ? Math.max(400, paginas.length * 320) : undefined;
 
+  let pageKeyCounter = 0;
+  const wrapByKey = (node: React.ReactNode, key: number) => {
+    const inner = (
+      <div className="shadow-xl rounded-sm overflow-hidden border border-white/10 print-editorial-page">
+        {node}
+      </div>
+    );
+    if (renderPageWrapper) return <React.Fragment key={key}>{renderPageWrapper(inner, key)}</React.Fragment>;
+    return (
+      <div key={key} className="preview-page-wrap flex flex-col items-center shrink-0">
+        {inner}
+      </div>
+    );
+  };
+
   return (
     <div
       className={`flex flex-col items-center gap-4 ${className}`}
@@ -122,29 +166,43 @@ export function MaterialPreviewBlocks({ data, className = '', scale = 0.4, rende
       {paginas.map((pagina, index) => {
         if (!pagina || typeof pagina !== 'object') return null;
         const tipo = pagina.tipo || 'conteudo';
-        const contentBlocks = pagina.content_blocks as ContentBlockItem[] | undefined;
+        const contentBlocks = normalizeContentBlocks(pagina.content_blocks);
         const paragrafos = pagina.bloco_principal
-          ? pagina.bloco_principal.split(/\n+/).filter(Boolean)
-          : pagina.bloco_principal ? [pagina.bloco_principal] : [];
+          ? pagina.bloco_principal
+              .split(/\n+/)
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+        const bodyTextParts = collectPageTextParts(pagina);
+        const introParagraphs = bodyTextParts.length ? bodyTextParts : paragrafos;
         const titulo = (pagina.titulo ?? pagina.titulo_bloco) || 'Conteúdo';
         const isFirstContent = tipo === 'conteudo' && contentPageIndex === 0;
         if (tipo === 'conteudo') contentPageIndex += 1;
 
-        const wrap = (node: React.ReactNode) => {
-          const inner = (
-            <div className="shadow-xl rounded-sm overflow-hidden border border-white/10 print-editorial-page">
-              {node}
-            </div>
-          );
-          if (renderPageWrapper) return <React.Fragment key={index}>{renderPageWrapper(inner, index)}</React.Fragment>;
-          return (
-            <div key={index} className="preview-page-wrap flex flex-col items-center shrink-0">
-              {inner}
-            </div>
-          );
-        };
+        const wrap = (node: React.ReactNode) => wrapByKey(node, pageKeyCounter++);
 
         if (tipo === 'capa') {
+          if (isVtsd) {
+            return wrap(
+              <div className="relative w-[595px] h-[842px] overflow-hidden">
+                <img src="/images/capa-vtsd.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
+                <div className="absolute inset-0 px-10 pt-10">
+                  <div className="relative z-10 flex items-start justify-between text-[#202020]">
+                    <h3 className="text-[20px] font-light tracking-tight max-w-[56%] leading-tight">
+                      {moduleName}
+                    </h3>
+                    <div className="text-right leading-tight">
+                      <div className="text-[18px] font-light">Aula</div>
+                      <div className="text-[34px] font-semibold">Nº {lessonNumber}</div>
+                    </div>
+                  </div>
+                  <h1 className="relative z-10 mt-6 text-[54px] leading-[1.03] font-bold text-[#111] max-w-[92%]">
+                    {pagina.titulo || tituloGeral}
+                  </h1>
+                </div>
+              </div>
+            );
+          }
           return wrap(
             <PageCoverEditorial
               title={pagina.titulo || tituloGeral}
@@ -165,12 +223,56 @@ export function MaterialPreviewBlocks({ data, className = '', scale = 0.4, rende
           );
         }
 
+        if (tipo === 'intro_ref' && isVtsd) {
+          return wrap(
+            <div className="w-[595px] h-[842px] overflow-hidden">
+              <img
+                src="/images/Introducao-padrao-vtsd.png"
+                alt="Introdução"
+                className="w-full h-full object-cover"
+              />
+            </div>
+          );
+        }
+
+        if (tipo === 'sumario_ref' && isVtsd) {
+          return wrap(
+            <div className="relative w-[595px] h-[842px] overflow-hidden">
+              <img src="/images/sumario-vtsd.png" alt="" className="absolute inset-0 w-full h-full object-cover" />
+              <div className="absolute inset-0 z-10 px-8 pt-52 pb-16 flex flex-col items-center justify-start">
+                <ol className="list-none space-y-3.5 w-full max-w-[460px] mx-auto mt-12">
+                  {tocItems.map((item, i) => {
+                    const pageNum = tocStartPages[i] ?? i + 1;
+                    return (
+                      <li
+                        key={i}
+                        className="flex w-full items-baseline gap-2 text-[#0d9e97] text-[17px] font-semibold"
+                      >
+                        <span className="w-9 shrink-0 text-right tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+                        <span className="min-w-0 shrink leading-[1.35]">{item}</span>
+                        <span
+                          className="flex-1 min-w-[1rem] border-b-2 border-dotted border-[#0d9e97]/40 mb-1 mx-0.5"
+                          aria-hidden
+                        />
+                        <span className="shrink-0 tabular-nums w-7 text-right" aria-label={`Página ${pageNum}`}>
+                          {pageNum}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            </div>
+          );
+        }
+
         const template = chooseEditorialTemplate(pagina, index, isFirstContent);
 
         if (template === 'summary') {
           const items = pagina.destaques?.length
             ? pagina.destaques
-            : (pagina.itens as string[] | undefined) ?? paragrafos.slice(0, 8);
+            : (pagina.itens as string[] | undefined) ??
+              (bodyTextParts.length ? bodyTextParts : paragrafos).slice(0, 8);
           return wrap(
             <PageSummary
               title={titulo}
@@ -187,7 +289,7 @@ export function MaterialPreviewBlocks({ data, className = '', scale = 0.4, rende
           return wrap(
             <PageIntro
               title={titulo}
-              paragraphs={paragrafos.length ? paragrafos : undefined}
+              paragraphs={introParagraphs}
               contentBlocks={contentBlocks}
               imagePlaceholder={pagina.sugestao_imagem || 'Imagem'}
               imagePrompt={pagina.prompt_imagem}
@@ -198,38 +300,47 @@ export function MaterialPreviewBlocks({ data, className = '', scale = 0.4, rende
           );
         }
 
-        if (contentBlocks?.length) {
+        if (contentBlocks.length) {
+          const fallbackForBlocks = paragrafos.length ? paragrafos : bodyTextParts;
+          const needTextFallback = shouldAppendPageTextFallback(contentBlocks, fallbackForBlocks);
+          const afterBlocks =
+            needTextFallback && fallbackForBlocks.length
+              ? renderParagraphParts(fallbackForBlocks, `pg-${index}-fb`)
+              : undefined;
+          const showDestaquesRight =
+            Boolean(pagina.destaques?.length) && !(needTextFallback && !paragrafos.length);
           return wrap(
             <PageDoubleColumn
               title={titulo}
               contentBlocks={contentBlocks}
-              rightContent={pagina.destaques?.length ? <ul className="list-disc pl-4 space-y-1">{pagina.destaques.map((d, i) => <li key={i}>{d}</li>)}</ul> : undefined}
+              afterBlocksContent={afterBlocks}
+              rightContent={
+                showDestaquesRight ? (
+                  <ul className="list-disc pl-4 space-y-1">
+                    {pagina.destaques!.map((d, i) => (
+                      <li key={i}>{d}</li>
+                    ))}
+                  </ul>
+                ) : undefined
+              }
               nomeCurso={nomeCurso}
               primary={primary}
             />
           );
         }
 
-        const mid = Math.ceil(paragrafos.length / 2);
-        const leftParas = paragrafos.slice(0, mid);
-        const rightParas = paragrafos.slice(mid);
+        const safeParts = bodyTextParts.length
+          ? bodyTextParts
+          : ['Conteúdo extraído do VTT não foi estruturado em parágrafos nesta seção.'];
+
+        const mid = Math.ceil(safeParts.length / 2);
+        const leftParas = safeParts.slice(0, mid);
+        const rightParas = safeParts.slice(mid);
         return wrap(
           <PageDoubleColumn
             title={titulo}
-            leftContent={
-              <>
-                {leftParas.map((p, i) => (
-                  <p key={i}>{p}</p>
-                ))}
-              </>
-            }
-            rightContent={
-              <>
-                {rightParas.map((p, i) => (
-                  <p key={i}>{p}</p>
-                ))}
-              </>
-            }
+            leftContent={<>{renderParagraphParts(leftParas, `pg-${index}-L`)}</>}
+            rightContent={<>{renderParagraphParts(rightParas, `pg-${index}-R`)}</>}
             nomeCurso={nomeCurso}
             primary={primary}
           />

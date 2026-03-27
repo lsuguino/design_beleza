@@ -11,6 +11,8 @@ export interface PageDoubleColumnProps {
   rightContent?: React.ReactNode;
   /** Quando presente, renderiza no lugar de leftContent (placeholders img/mermaid) */
   contentBlocks?: ContentBlockItem[];
+  /** Texto da página (bloco_principal etc.) quando os blocos não trazem texto suficiente */
+  afterBlocksContent?: React.ReactNode;
   nomeCurso: string;
   primary?: string;
 }
@@ -20,10 +22,16 @@ export function PageDoubleColumn({
   leftContent,
   rightContent,
   contentBlocks,
+  afterBlocksContent,
   nomeCurso,
   primary = 'var(--print-primary)',
 }: PageDoubleColumnProps) {
-  const left = contentBlocks?.length ? <ContentBlocksRenderer blocks={contentBlocks} /> : leftContent;
+  const left = (
+    <>
+      {contentBlocks?.length ? <ContentBlocksRenderer blocks={contentBlocks} /> : leftContent}
+      {afterBlocksContent}
+    </>
+  );
 
   return (
     <section

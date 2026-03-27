@@ -290,11 +290,11 @@ OBJETIVO DA APOSTILA:
 
 Regras obrigatórias:
 1. CONTEÚDO: Reescreva de forma didática e abrangente — conceitos claros, definições completas, passos, justificativas e conclusões. O aluno lendo a apostila deve conseguir entender e aplicar o que foi ensinado sem depender do vídeo.
-2. EXEMPLOS DO PROFESSOR (OBRIGATÓRIO — LEITURA EM LISTA): Toda vez que o professor citar exemplo, pergunta ilustrativa, diálogo, caso ou situação, transcreva fielmente. Apresente para leitura fácil: **prefira um block "list" com um item por exemplo** (texto completo de cada ilustração). Opcionalmente um "paragraph" curto antes para contextualizar. Pode usar um único block "example" só quando houver apenas um exemplo isolado naquele trecho.
-2.1 Não agrupe vários exemplos distintos em um único parágrafo denso sem lista.
-2.2 Não omita exemplos relevantes. PROIBIDO inventar exemplos não citados no VTT.
-3. ESTRUTURA: Organize em seções com títulos. Prefira "paragraph" para explicações. Use "key_point" só para ideias realmente centrais. Use listas ("list") APENAS quando houver enumeração clara na fala do professor (itens, passos, “primeiro/segundo/terceiro”). Evite transformar o material inteiro em bullet points.
-3.1 REGRA DE PROPORÇÃO (ORIENTADORA): predominância de "paragraph" nas explicações. Blocks "list" são esperados para enumerações do professor e **obrigatoriamente para listar exemplos citados** (um item por exemplo); isso não é “excesso indevido” de bullets.
+2. EXPLICAÇÃO vs EXEMPLOS: Conceitos, definições e método devem ir em blocks "paragraph" (texto corrido). **Blocks "list" apenas para exemplos concretos citados na aula** (caso, pergunta modelo, diálogo) — um item por exemplo. Opcionalmente um "paragraph" curto antes contextualiza. Um único "example" só se houver um exemplo isolado.
+2.1 PROIBIDO usar "list" para resumir teoria ou conceitos em tópicos. PROIBIDO inventar exemplos.
+2.2 Não omita exemplos relevantes do VTT.
+3. ESTRUTURA: Seções com títulos. "paragraph" desenvolvido para teorias. "key_point" só para ideia central pontual. **Não transforme o material em bullet points**, exceto listas de exemplos conforme item 2.
+3.1 PROPORÇÃO: no mínimo 85% dos blocks de texto da seção em "paragraph"; "list" restrito a exemplos citados (ou enumeração explícita que o professor leu como lista de casos).
 3.2 Não gere seção composta apenas por tópicos. Cada seção deve ter explicação em parágrafo desenvolvido antes de qualquer lista.
 4. MAPA MENTAL: Em seções que forem um "resumo da estratégia completa", "visão geral", "síntese" ou equivalente, inclua SEMPRE um block "mind_map" com "center" e "items" (4 a 8 ramos). Os "items" devem ser os pontos realmente abordados na aula, não inventados.
 5. DENSIDADE MÍNIMA (OBRIGATÓRIA): cada seção deve conter explicação suficiente, evitando blocos rasos. Prefira parágrafos mais desenvolvidos com contexto e transições. Não gere seções com conteúdo telegráfico.
@@ -319,8 +319,8 @@ REGRA CRÍTICA — USE SOMENTE O VTT:
 
 Regras:
 - Estrutura enxuta: poucas seções (3 a 5), porém com EXPLICAÇÃO em texto corrido (paragraph). Evite ficar só em tópicos.
-- Use listas (list) APENAS quando houver enumeração clara na fala do professor. Não transforme o material inteiro em bullets.
-- No mínimo 80% dos blocks devem ser "paragraph"; listas e key_points no máximo 20%.
+- Texto corrido para conceitos. "list" só para **exemplos citados** na aula (um item por exemplo), não para resumir teoria.
+- No mínimo 85% "paragraph" nas seções; listas restritas a exemplos.
 - Inclua os conceitos essenciais, definições e conclusões, com contexto suficiente para entendimento (mesmo no resumido).
 - Use **termo** para destacar conceitos-chave.
 - NÃO inclua image_placeholder, chart ou flowchart a menos que seja essencial e esteja explícito na transcrição.

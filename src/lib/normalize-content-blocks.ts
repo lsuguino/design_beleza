@@ -69,3 +69,25 @@ export function collectPageTextParts(page: {
   if (page.dado_numerico) parts.push(String(page.dado_numerico).trim());
   return parts.filter(Boolean);
 }
+
+/** Partes de texto para coluna principal: bloco + itens + citação, sem destaques (reservados para bullets de exemplos). */
+export function collectConceptTextParts(page: {
+  bloco_principal?: string;
+  itens?: unknown;
+  citacao?: unknown;
+  dado_numerico?: unknown;
+}): string[] {
+  const fromBloco = page.bloco_principal
+    ? page.bloco_principal
+        .split(/\n+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  const itens = Array.isArray(page.itens)
+    ? (page.itens as unknown[]).map((s) => String(s).trim()).filter(Boolean)
+    : [];
+  const parts: string[] = [...fromBloco, ...itens];
+  if (page.citacao) parts.push(String(page.citacao).trim());
+  if (page.dado_numerico) parts.push(String(page.dado_numerico).trim());
+  return parts.filter(Boolean);
+}

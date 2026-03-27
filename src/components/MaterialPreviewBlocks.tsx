@@ -3,13 +3,13 @@
 import React from 'react';
 import { PageCoverEditorial } from '@/components/pages/PageCoverEditorial';
 import { PageContraCapa } from '@/components/pages/PageContraCapa';
-import { PageSummary } from '@/components/pages/PageSummary';
 import { PageIntro } from '@/components/pages/PageIntro';
 import { PageDoubleColumn } from '@/components/pages/PageDoubleColumn';
 import { renderParagraphParts, type ContentBlockItem } from '@/components/ContentBlocksRenderer';
 import {
   normalizeContentBlocks,
   collectPageTextParts,
+  collectConceptTextParts,
   shouldAppendPageTextFallback,
 } from '@/lib/normalize-content-blocks';
 
@@ -82,15 +82,9 @@ function computeTocStartPages(paginas: PaginaDesign[]): number[] {
   return starts;
 }
 
-/** Decide template editorial: summary (lista numerada), intro (imagem topo), double_column */
-function chooseEditorialTemplate(
-  pagina: PaginaDesign,
-  index: number,
-  isFirstContent: boolean
-): 'summary' | 'intro' | 'double_column' {
-  const hasList = (pagina.destaques?.length ?? 0) >= 2 || (pagina.itens?.length ?? 0) >= 2;
+/** Intro na 1ª página ou quando há sugestão de imagem; demais em duas colunas (texto corrido + exemplos à direita). */
+function chooseEditorialTemplate(pagina: PaginaDesign, isFirstContent: boolean): 'intro' | 'double_column' {
   const hasImageHint = Boolean(pagina.sugestao_imagem || pagina.prompt_imagem);
-  if (hasList && (pagina.titulo || pagina.titulo_bloco)) return 'summary';
   if (isFirstContent || hasImageHint) return 'intro';
   return 'double_column';
 }
@@ -174,7 +168,8 @@ export function MaterialPreviewBlocks({ data, className = '', scale = 0.4, rende
               .filter(Boolean)
           : [];
         const bodyTextParts = collectPageTextParts(pagina);
-        const introParagraphs = bodyTextParts.length ? bodyTextParts : paragrafos;
+        const conceptParts = collectConceptTextParts(pagina);
+        const introParagraphs = conceptParts.length ? conceptParts : bodyTextParts;
         const titulo = (pagina.titulo ?? pagina.titulo_bloco) || 'Conteúdo';
         const isFirstContent = tipo === 'conteudo' && contentPageIndex === 0;
         if (tipo === 'conteudo') contentPageIndex += 1;
@@ -266,24 +261,7 @@ export function MaterialPreviewBlocks({ data, className = '', scale = 0.4, rende
           );
         }
 
-        const template = chooseEditorialTemplate(pagina, index, isFirstContent);
-
-        if (template === 'summary') {
-          const items = pagina.destaques?.length
-            ? pagina.destaques
-            : (pagina.itens as string[] | undefined) ??
-              (bodyTextParts.length ? bodyTextParts : paragrafos).slice(0, 8);
-          return wrap(
-            <PageSummary
-              title={titulo}
-              items={items.length ? items : ['Conteúdo em lista.']}
-              sidebarLabel={nomeCurso}
-              nomeCurso={nomeCurso}
-              primary={primary}
-              accent={accent}
-            />
-          );
-        }
+        const template = chooseEditorialTemplate(pagina, isFirstContent);
 
         if (template === 'intro') {
           return wrap(
@@ -300,8 +278,11 @@ export function MaterialPreviewBlocks({ data, className = '', scale = 0.4, rende
           );
         }
 
+        const destaquesList = (pagina.destaques as string[] | undefined)?.filter(Boolean) ?? [];
+
         if (contentBlocks.length) {
-          const fallbackForBlocks = paragrafos.length ? paragrafos : bodyTextParts;
+          const fallbackForBlocks =
+            paragrafos.length > 0 ? paragrafos : conceptParts.length > 0 ? conceptParts : bodyTextParts;
           const needTextFallback = shouldAppendPageTextFallback(contentBlocks, fallbackForBlocks);
           const afterBlocks =
             needTextFallback && fallbackForBlocks.length
@@ -329,13 +310,34 @@ export function MaterialPreviewBlocks({ data, className = '', scale = 0.4, rende
           );
         }
 
-        const safeParts = bodyTextParts.length
-          ? bodyTextParts
-          : ['Conteúdo extraído do VTT não foi estruturado em parágrafos nesta seção.'];
+        const safeConcept =
+          conceptParts.length > 0
+            ? conceptParts
+            : bodyTextParts.length > 0
+              ? bodyTextParts
+              : ['Conteúdo extraído do VTT não foi estruturado em parágrafos nesta seção.'];
 
-        const mid = Math.ceil(safeParts.length / 2);
-        const leftParas = safeParts.slice(0, mid);
-        const rightParas = safeParts.slice(mid);
+        if (destaquesList.length > 0) {
+          return wrap(
+            <PageDoubleColumn
+              title={titulo}
+              leftContent={<>{renderParagraphParts(safeConcept, `pg-${index}-main`)}</>}
+              rightContent={
+                <ul className="list-disc pl-4 space-y-2">
+                  {destaquesList.map((d, i) => (
+                    <li key={i}>{d}</li>
+                  ))}
+                </ul>
+              }
+              nomeCurso={nomeCurso}
+              primary={primary}
+            />
+          );
+        }
+
+        const mid = Math.ceil(safeConcept.length / 2);
+        const leftParas = safeConcept.slice(0, mid);
+        const rightParas = safeConcept.slice(mid);
         return wrap(
           <PageDoubleColumn
             title={titulo}

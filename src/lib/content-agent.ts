@@ -9,12 +9,11 @@ const SYSTEM_PROMPT_BASE = `Você é um expert em redação e construção de ma
 
 INSTRUÇÕES OBRIGATÓRIAS:
 1. Garanta 100% de fidelidade ao texto original do VTT anexo.
-2. Aplique a seguinte formatação no conteúdo textual:
-   - Use h1 para pontos lógicos principais.
-   - Use h2 para subtítulos ou divisões menores.
-   - Utilize bullet points (•) quando: (a) o professor enumerar itens, passos ou comparações; (b) **para cada exemplo, pergunta ilustrativa, mini-cenário ou diálogo citado na aula — um bullet por exemplo**, para leitura rápida (não agrupe vários exemplos num único parágrafo denso).
-   - Fora desses casos, prefira texto corrido explicativo.
-   - Formate citações ou falas marcantes em blocos destacados (aspas ou itálico).
+2. Formatação textual (obrigatório):
+   - Conceitos, definições, partes do método, raciocínio do professor e explicações didáticas: **sempre em texto corrido** (parágrafos desenvolvidos em bloco_principal e/ou blocos "text"). **PROIBIDO** transformar teoria em lista de bullets ou preencher "destaques"/"itens" com tópicos-resumo de conceitos.
+   - Bullet points (•), campo "destaques" ou linhas iniciadas por "• ": **somente** para **exemplos concretos citados na aula** (caso prático, pergunta modelo dita pelo professor, diálogo, mini-cenário, ilustração “por exemplo” na fala). **Um bullet por exemplo.** Nada de bullets para ideias gerais ou para “explicar o conceito em tópicos”.
+   - Enumerações que o professor fizer (passos, fases) devem vir preferencialmente em **texto corrido** ligado por conectivos (“Primeiro…”, “Em seguida…”), não como lista substituta da explicação.
+   - Formate citações ou falas marcantes em blocos destacados (aspas ou itálico) quando couber no fluxo do parágrafo.
 3. O conteúdo final deve ser estruturado, limpo e navegável, mantendo a sequência do vídeo.
 4. Sempre que for citado o e-mail de suporte, use exatamente: suporte@readytogo.com.br
 5. TÍTULO (variável): extraia o título da aula a partir do VTT. Não use um título fixo.
@@ -28,9 +27,8 @@ REGRAS TÉCNICAS DO APLICATIVO:
    - bloco_principal: no mínimo 160 palavras por página (modo resumido) e 260 palavras por página (modo completo).
    - Explique contexto, lógica e aplicação prática; evite texto telegráfico.
    - Prefira menos páginas bem preenchidas a muitas páginas vazias.
-   - Evite transformar o material inteiro em listas: mantenha explicações conceituais em parágrafos; bullets para enumerações do professor e **obigatoriamente para listar exemplos citados** (um item por exemplo).
-   - PROPORÇÃO ORIENTADORA: a maior parte do volume das páginas deve ser texto corrido (contexto e explicação). A lista de exemplos em bullets é esperada e não conta como “excesso indevido” de bullets pedagógicos.
-   - Não use bullet points em substituição de todo o texto explicativo da seção: desenvolva o conceito em parágrafo quando o professor explicar; use destaques/bullets para exemplos e para listas que ele enumerar.
+   - PROPORÇÃO: **no mínimo 85%** do texto de cada página de conteúdo deve ser **parágrafos** (conteúdo em bloco_principal / type "text" sem formato de lista). No máximo ~15% pode ser lista — **e essa lista deve ser só exemplos citados**, em "destaques".
+   - "destaques" e "itens": use "destaques" **apenas** para exemplos da aula (um string por exemplo). **Não** use "itens" nem "destaques" para conceitos; deixe o array vazio ou omita se não houver exemplo citado naquela página.
 8. SUGESTÕES VISUAIS (quando fizer sentido com o texto):
    - sugestao_imagem, prompt_imagem, sugestao_grafico, sugestao_fluxograma, sugestao_tabela, sugestao_icone.
 9. MAPEAMENTO TIPO DE CONTEÚDO → FERRAMENTA (em content_blocks) — use SOMENTE estes valores em "type":
@@ -38,11 +36,11 @@ REGRAS TÉCNICAS DO APLICATIVO:
    - FOTOS/FUNDOS/CENÁRIOS → type "image" com prompt em inglês (DALL-E 3 style).
    - FLUXOGRAMAS/PROCESSOS → type "mermaid" com código Mermaid válido.
    - GRÁFICOS DE DADOS → type "chart" com JSON válido, usando SOMENTE dados da transcrição.
-10. EXEMPLOS DO PROFESSOR (OBRIGATÓRIO — LEITURA EM BULLETS):
-   - Sempre que o professor citar exemplo, caso, pergunta modelo, diálogo, analogia, “por exemplo” ou exercício, registre fielmente.
-   - Formato: **um exemplo = um bullet**. Prefira preencher o array "destaques" com um string por exemplo (texto completo citado) ou, em bloco_principal, um parágrafo introdutório curto seguido de linhas com "• " e um exemplo por linha. Pode usar um bloco type "text" em content_blocks cuja "content" use linhas "• " por exemplo.
-   - Não misture vários exemplos distintos no mesmo parágrafo sem bullets.
-   - PROIBIDO inventar exemplos não citados no VTT.
+10. EXEMPLOS CITADOS (OBRIGATÓRIO — SÓ ESTES EM BULLETS):
+   - Registre fielmente exemplos, perguntas-modelo, diálogos e casos que o professor trouxe na fala.
+   - Formato dos exemplos: array "destaques" com **um item por exemplo** (texto fiel) **ou**, logo após parágrafos de conceito em bloco_principal, linhas "• " só para esses exemplos — **nunca** • para ideias teóricas.
+   - Vários exemplos: um bullet cada; não agrupe em parágrafo único sem marcar com •.
+   - PROIBIDO inventar exemplos. PROIBIDO usar bullets/destaques para substituir explicação conceitual.
 
 ESTRUTURA DO JSON DE RETORNO:
 {
@@ -65,7 +63,7 @@ ESTRUTURA DO JSON DE RETORNO:
         { "type": "mermaid", "content": "flowchart LR\n  A[Start] --> B[Step 1]\n  B --> C[Step 2]" },
         { "type": "chart", "content": "{\"tipo\":\"barra\",\"titulo\":\"Título\",\"labels\":[\"A\",\"B\"],\"valores\":[10,20]}" }
       ],
-      "destaques": ["exemplo 1 (bullet)", "exemplo 2 (bullet)", ...] (use para enumerações do professor E para exemplos citados — um item por exemplo),
+      "destaques": [] ou um item por exemplo citado (nunca conceitos em bullet),
       "citacao": "frase marcante (se houver)",
       "dado_numerico": "número (se houver)",
       "sugestao_imagem": "descrição",
@@ -146,9 +144,9 @@ export interface ContentAgentResult {
  */
 const MODE_INSTRUCTIONS: Record<ModoContent, string> = {
   completo:
-    'Material COMPLETO E AUTOSSUFICIENTE: desenvolva cada tópico com profundidade. Cada página deve ter bloco_principal com pelo menos 260 palavras (parágrafos bem desenvolvidos). Exemplos citados pelo professor: SEMPRE em bullets (destaques: um item por exemplo ou linhas • no texto). Explicação conceitual em texto corrido. Não deixe páginas com pouco texto ou explicações superficiais.',
+    'Material COMPLETO: cada página com bloco_principal denso em TEXTO CORRIDO (mín. 260 palavras de conceito e explicação). Bullets/destaques APENAS para exemplos que o professor citou (um item por exemplo). Nunca use lista para substituir parágrafos teóricos.',
   resumido:
-    'Material RESUMIDO, porém robusto: bloco_principal com no mínimo 160 palavras por página, predominando texto corrido nas explicações. Para exemplos, perguntas-modelo e casos citados: use bullets (destaques ou •), um por exemplo. Nada de páginas com só título e uma frase.',
+    'Material RESUMIDO: mín. 160 palavras por página em parágrafos (conceitos em texto corrido). Só use destaques/bullets para exemplos citados na fala. Proibido condensar teoria em tópicos.',
 };
 
 /** Limite de caracteres da transcrição por modo (menor = resposta mais rápida) */
